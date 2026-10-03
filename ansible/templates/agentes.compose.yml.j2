@@ -1,0 +1,24 @@
+# Agentes de observabilidad en {{ inventory_hostname }}. Red de host: ufw controla el puerto 9100.
+services:
+  node-exporter:
+    image: {{ images.node_exporter }}
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+{% if ansible_os_family == 'RedHat' %}    security_opt: [label=disable]   # SELinux: leer la configuración montada
+{% endif %}    command:
+      - --path.rootfs=/host
+      - --web.listen-address={{ ansible_host }}:9100
+    volumes:
+      - /:/host:ro,rslave
+
+  promtail:
+    image: {{ images.promtail }}
+    network_mode: host
+    restart: unless-stopped
+{% if ansible_os_family == 'RedHat' %}    security_opt: [label=disable]   # SELinux: leer la configuración montada
+{% endif %}    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro

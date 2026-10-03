@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: node
+    static_configs:
+{% for name, addr in ip.items() %}
+      - targets: ["{{ addr }}:9100"]
+        labels: { vm: {{ name }} }
+{% endfor %}

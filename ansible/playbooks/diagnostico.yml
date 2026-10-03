@@ -1,0 +1,31 @@
+# Solo lectura: confirma conexión, sudo y estado de cada VM. No cambia nada.
+- name: Diagnóstico de las VMs
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Resumen de la VM
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} ({{ ansible_host }}):
+          {{ ansible_distribution }} {{ ansible_distribution_version }},
+          {{ ansible_processor_vcpus }} vCPU,
+          {{ (ansible_memtotal_mb / 1024) | round(1) }} GiB RAM,
+          disco libre en /: {{ ((ansible_mounts | selectattr('mount','equalto','/') | first).size_available / 1024**3) | round(1) }} GiB
+
+    - name: ¿Docker instalado?
+      ansible.builtin.command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: ¿ufw activo?
+      ansible.builtin.command: ufw status
+      register: ufw_check
+      changed_when: false
+      failed_when: false
+
+    - name: Estado actual
+      ansible.builtin.debug:
+        msg:
+          docker: "{{ docker_check.stdout | default('no instalado') }}"
+          ufw: "{{ ufw_check.stdout_lines[0] | default('no disponible') }}"
