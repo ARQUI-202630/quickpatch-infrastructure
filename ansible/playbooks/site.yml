@@ -1,0 +1,12 @@
+# Orden completo (sección 5.4). Producción: VM1 y VM3 a VM7. QA: VM2 (ADR-015).
+# Storage y observabilidad va antes que la base de datos porque el respaldo escribe en MinIO.
+# k3s de producción y QA van antes que el runner, que necesita sus kubeconfig.
+- import_playbook: setup-base.yml
+- import_playbook: deploy-storage-observability.yml
+- import_playbook: deploy-db.yml
+- import_playbook: deploy-cache.yml
+- import_playbook: deploy-kafka.yml
+- import_playbook: deploy-k3s.yml
+- import_playbook: deploy-qa.yml
+- import_playbook: deploy-gateway.yml
+- import_playbook: deploy-runner.yml

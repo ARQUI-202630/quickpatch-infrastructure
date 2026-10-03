@@ -1,0 +1,78 @@
+# Variables comunes a las 7 VMs.
+# Lo que dice "CONFIRMAR" hay que revisarlo antes del primer despliegue.
+
+# --- Acceso -----------------------------------------------------------------
+vm_admin_user: estudiante         # usuario que dio el laboratorio. La clave NUNCA va en este repo (-k -K)
+ansible_user: "{{ vm_admin_user }}"
+deploy_user: quickpatch            # usuario de despliegue que crea setup-base.yml
+deploy_user_pubkeys: []            # llaves públicas del equipo (contenido de *.pub)
+
+# Desactivar el login por contraseña SOLO después de probar que las llaves funcionan.
+ssh_disable_password_auth: false
+
+# Desde dónde se permite SSH y el acceso del equipo a las consolas (Kafka UI, Grafana,
+# Prometheus, MinIO, escritorio remoto). La VPN de la Javeriana entrega direcciones 10.101.x.x
+# (observado el 2026-10-03), dentro de 10.0.0.0/8.
+ssh_allowed_from: [any]
+team_networks: [10.0.0.0/8]
+# Monitoreo del laboratorio: el agente de Zabbix (10050) ya escucha en las 7 VMs.
+lab_networks: [10.0.0.0/8]
+
+# --- IPs (Documento de Infraestructura, sección 3.2) -------------------------
+ip:
+  vm1: 10.43.100.168
+  vm2: 10.43.98.15
+  vm3: 10.43.98.205
+  vm4: 10.43.98.209
+  vm5: 10.43.98.29
+  vm6: 10.43.99.12
+  vm7: 10.43.99.8
+
+# --- Rutas --------------------------------------------------------------------
+stack_dir: /opt/quickpatch
+
+# --- Versiones fijadas ---------------------------------------------------------
+images:
+  postgis: postgis/postgis:16-3.4
+  redis: redis:7.4-alpine
+  kafka: apache/kafka:3.8.1
+  kafka_ui: provectuslabs/kafka-ui:v0.7.2
+  minio: minio/minio:RELEASE.2024-12-18T13-15-44Z
+  minio_client: minio/mc:RELEASE.2024-11-21T17-21-54Z
+  prometheus: prom/prometheus:v2.55.1
+  loki: grafana/loki:3.3.2
+  grafana: grafana/grafana:11.4.0
+  node_exporter: prom/node-exporter:v1.8.2
+  promtail: grafana/promtail:3.3.2
+  nginx: nginx:1.27-alpine
+k3s_version: v1.31.4+k3s1
+
+# Almacenamiento de objetos (evidencias y respaldos). MinIO dejó de distribuir imágenes y
+# binarios en 2025 (dl.min.io responde 410). PENDIENTE de decidir el reemplazo; mientras tanto,
+# apagado: no se levanta el storage ni el respaldo a storage.
+object_storage_enabled: false
+
+# --- k3s (sección 5.2: fuera del rango del laboratorio, 10.43.0.0/16) ---------
+k3s_service_cidr: 10.44.0.0/16
+k3s_cluster_cidr: 10.42.0.0/16
+k3s_cluster_dns: 10.44.0.10
+
+# --- PostgreSQL ----------------------------------------------------------------
+# Una base por servicio, según la propuesta de base de datos por servicio
+# (pendiente de aprobación del equipo como ADR-014). Si no se aprueba, dejar una sola.
+postgres_databases:
+  - identity
+  - actors
+  - catalog
+  - service_request
+  - matching
+  - ranking
+  - payments
+  - communication
+postgis_databases: [matching]
+
+# --- QA (ADR-015) --------------------------------------------------------------
+# Mismos componentes que producción, con memoria reducida para caber en una VM.
+qa_kafka_heap: "-Xms512m -Xmx1g"
+qa_redis_maxmemory: 512mb
+backup_retention_days: 7

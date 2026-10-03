@@ -1,0 +1,56 @@
+# Ubuntu (VM1, VM3, VM4, VM6, VM7): paquetes, Docker y firewall con ufw.
+- name: Paquetes base
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, gnupg, ufw, chrony, unattended-upgrades, jq, openssl]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 600   # las actualizaciones automáticas de Ubuntu pueden estar usando apt
+
+- name: Carpeta de llaves de apt
+  ansible.builtin.file: { path: /etc/apt/keyrings, state: directory, mode: "0755" }
+
+- name: Llave del repositorio de Docker
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Repositorio de Docker
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    filename: docker
+
+- name: Docker Engine y plugin de Compose
+  ansible.builtin.apt:
+    name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+    state: present
+    update_cache: true
+    lock_timeout: 600
+
+# El 22 se abre ANTES de activar ufw, para no perder la conexión.
+- name: Permitir SSH
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    from_ip: "{{ item }}"
+    comment: SSH
+  loop: "{{ ssh_allowed_from }}"
+
+- name: Reglas de la VM
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.0.port | string }}"
+    proto: tcp
+    from_ip: "{{ item.1 }}"
+    comment: "{{ item.0.comment }}"
+  loop: "{{ vm_rules | subelements('from') }}"
+  loop_control:
+    label: "{{ item.0.port }} desde {{ item.1 }}"
+
+- name: Activar ufw con política de denegar lo entrante
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

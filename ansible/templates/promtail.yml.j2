@@ -1,0 +1,35 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+positions:
+  filename: /tmp/positions.yaml
+clients:
+  - url: http://{{ ip.vm7 }}:3100/loki/api/v1/push
+scrape_configs:
+  - job_name: contenedores
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: docker
+          vm: {{ inventory_hostname }}
+          __path__: /var/lib/docker/containers/*/*-json.log
+    pipeline_stages:
+      - docker: {}
+{% if inventory_hostname == 'vm3' %}
+  - job_name: pods-k3s
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: k3s
+          vm: {{ inventory_hostname }}
+          __path__: /var/log/pods/*/*/*.log
+    pipeline_stages:
+      - cri: {}
+{% endif %}
+  - job_name: sistema
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: syslog
+          vm: {{ inventory_hostname }}
+          __path__: /var/log/syslog

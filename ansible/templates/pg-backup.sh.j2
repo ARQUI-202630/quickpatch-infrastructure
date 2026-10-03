@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Respaldo diario de PostgreSQL a MinIO (VM7), una copia por base. Retención: {{ backup_retention_days }} días.
+set -euo pipefail
+FECHA=$(date +%Y-%m-%d)
+DIR={{ stack_dir }}/postgres/backups/$FECHA
+mkdir -p "$DIR"
+PG="docker compose -f {{ stack_dir }}/postgres/compose.yml exec -T -u postgres postgres"
+$PG pg_dumpall -U postgres --globals-only > "$DIR/globales.sql"
+{% for db in postgres_databases %}
+$PG pg_dump -U postgres -Fc db_{{ db }} > "$DIR/db_{{ db }}.dump"
+{% endfor %}
+docker run --rm --network host -v "$DIR":/data \
+  -e MC_HOST_minio="http://{{ vault_minio_root_user }}:{{ vault_minio_root_password }}@{{ ip.vm7 }}:9000" \
+  {{ images.minio_client }} mirror --overwrite /data minio/backups-postgres/$FECHA
+docker run --rm --network host \
+  -e MC_HOST_minio="http://{{ vault_minio_root_user }}:{{ vault_minio_root_password }}@{{ ip.vm7 }}:9000" \
+  {{ images.minio_client }} rm --recursive --force --older-than {{ backup_retention_days }}d minio/backups-postgres/ || true
+find {{ stack_dir }}/postgres/backups -mindepth 1 -maxdepth 1 -type d -mtime +2 -exec rm -rf {} +
+echo "$(date -Is) respaldo $FECHA completo"

@@ -1,0 +1,9 @@
+# VM3: k3s de producción con los 8 microservicios (secciones 5.2 y 5.3).
+- name: k3s de producción
+  hosts: backend
+  vars:
+    k3s_namespace: quickpatch
+    kubeconfig_name: produccion
+  tasks:
+    - name: Instalar k3s
+      ansible.builtin.include_tasks: ../tasks/k3s.yml

@@ -1,0 +1,62 @@
+# VM1: Nginx como punto único de entrada (secciones 5.2 y 10.1).
+# También sirve el panel Angular como archivos estáticos (ADR-015: VM2 pasó a ser QA).
+# HTTPS con certificado autofirmado: sin dominio público no hay CA pública (K9).
+- name: Gateway
+  hosts: gateway
+  vars:
+    dir: "{{ stack_dir }}/gateway"
+  tasks:
+    - name: Carpetas
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ dir }}", mode: "0755" }
+        - { path: "{{ dir }}/certs", mode: "0750" }
+        - { path: "{{ dir }}/panel", mode: "0755" }
+
+    - name: Página provisional del panel (hasta el primer build de Angular)
+      ansible.builtin.copy:
+        dest: "{{ dir }}/panel/index.html"
+        mode: "0644"
+        force: false
+        content: "<!doctype html><title>QUICKPATCH</title><p>Panel administrativo: pendiente del primer build de Angular.</p>\n"
+
+    - name: Certificado autofirmado (10 años, nombre quickpatch.internal)
+      ansible.builtin.command: >
+        openssl req -x509 -nodes -newkey rsa:4096 -days 3650
+        -keyout {{ dir }}/certs/quickpatch.key -out {{ dir }}/certs/quickpatch.crt
+        -subj "/CN=quickpatch.internal"
+        -addext "subjectAltName=DNS:quickpatch.internal,IP:{{ ansible_host }}"
+      args:
+        creates: "{{ dir }}/certs/quickpatch.crt"
+
+    - name: Configuración de Nginx
+      ansible.builtin.template:
+        src: ../templates/gateway-nginx.conf.j2
+        dest: "{{ dir }}/nginx.conf"
+        mode: "0644"
+      notify: Recargar gateway
+
+    - name: Compose del gateway
+      ansible.builtin.copy:
+        dest: "{{ dir }}/compose.yml"
+        mode: "0644"
+        content: |
+          services:
+            nginx:
+              image: {{ images.nginx }}
+              network_mode: host
+              restart: unless-stopped
+              volumes:
+                - ./nginx.conf:/etc/nginx/nginx.conf:ro
+                - ./certs:/etc/nginx/certs:ro
+                - ./panel:/usr/share/nginx/panel:ro
+
+    - name: Levantar el gateway
+      community.docker.docker_compose_v2: { project_src: "{{ dir }}", state: present }
+
+  handlers:
+    - name: Recargar gateway
+      community.docker.docker_compose_v2: { project_src: "{{ dir }}", state: restarted }

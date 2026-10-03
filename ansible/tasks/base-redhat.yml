@@ -1,0 +1,78 @@
+# Rocky Linux 9 (VM2): paquetes, Docker y firewall con firewalld. SELinux queda en Enforcing.
+- name: Paquetes base
+  ansible.builtin.dnf:
+    name: [ca-certificates, curl, firewalld, chrony, jq, openssl, python3-firewall, container-selinux]
+    state: present
+
+- name: Repositorio de Docker
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/rhel/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: "0644"
+
+- name: Docker Engine y plugin de Compose
+  ansible.builtin.dnf:
+    name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+    state: present
+
+- name: Docker activo al arrancar
+  ansible.builtin.service: { name: docker, state: started, enabled: true }
+
+- name: firewalld activo
+  ansible.builtin.service: { name: firewalld, state: started, enabled: true }
+
+# Zona propia: lo que no está aquí se rechaza. El 22 queda abierto antes de pasar la interfaz a la zona.
+- name: Zona quickpatch (rechaza lo que no esté permitido)
+  ansible.posix.firewalld:
+    zone: quickpatch
+    state: present
+    permanent: true
+
+- name: Política de rechazo de la zona
+  ansible.builtin.command: firewall-cmd --permanent --zone=quickpatch --set-target=DROP
+  register: target
+  changed_when: "'ALREADY_SET' not in target.stderr"
+  failed_when: target.rc != 0 and 'ALREADY_SET' not in target.stderr
+
+- name: Permitir SSH
+  ansible.posix.firewalld:
+    zone: quickpatch
+    rich_rule: >-
+      rule family="ipv4" {{ '' if item == 'any' else 'source address="' ~ item ~ '"' }}
+      port port="22" protocol="tcp" accept
+    permanent: true
+    state: enabled
+  loop: "{{ ssh_allowed_from }}"
+
+- name: Reglas de la VM
+  ansible.posix.firewalld:
+    zone: quickpatch
+    rich_rule: >-
+      rule family="ipv4" {{ '' if item.1 == 'any' else 'source address="' ~ item.1 ~ '"' }}
+      port port="{{ item.0.port }}" protocol="tcp" accept
+    permanent: true
+    state: enabled
+  loop: "{{ vm_rules | subelements('from') }}"
+  loop_control:
+    label: "{{ item.0.port }} desde {{ item.1 }}"
+
+# En Rocky, NetworkManager decide la zona de cada interfaz: se asigna en la conexión,
+# no solo en firewalld (si no, la interfaz vuelve a la zona public).
+- name: Conexión de NetworkManager de la interfaz principal
+  ansible.builtin.command: nmcli -g GENERAL.CONNECTION device show {{ ansible_default_ipv4.interface }}
+  register: nm_conn
+  changed_when: false
+
+- name: Interfaz principal en la zona quickpatch
+  ansible.builtin.command: nmcli connection modify "{{ nm_conn.stdout }}" connection.zone quickpatch
+  changed_when: true
+  when: nm_conn.stdout | length > 0
+
+- name: Reaplicar la conexión para que tome la zona
+  ansible.builtin.command: nmcli connection up "{{ nm_conn.stdout }}"
+  changed_when: false
+  when: nm_conn.stdout | length > 0
+
+- name: Aplicar la configuración de firewalld
+  ansible.builtin.command: firewall-cmd --reload
+  changed_when: false

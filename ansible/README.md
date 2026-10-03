@@ -1,3 +1,84 @@
-# ansible
+# Ansible de QUICKPATCH
 
-Área de infraestructura QUICKPATCH.
+Aprovisiona las 7 VMs según el Documento de Infraestructura (secciones 5, 7, 8, 9 y 10).
+
+Producción usa VM1 y VM3 a VM7. **VM2 es el ambiente de QA** (ADR-015), y el panel Angular vive en el gateway de VM1.
+
+## Ejecutar sin instalar nada
+
+`./ap` corre `ansible-playbook` dentro de un contenedor (`Dockerfile`), con la misma versión para todo el equipo:
+
+```bash
+docker build -t quickpatch-ansible .
+./ap playbooks/diagnostico.yml -k -K
+```
+
+## Requisitos (si se instala Ansible localmente)
+
+- Estar conectado a la VPN de la Javeriana (las VMs están en `10.43.x.x`).
+- Ansible y las colecciones:
+
+```bash
+python3 -m venv ~/.venvs/ansible
+~/.venvs/ansible/bin/pip install "ansible-core==2.18.*"
+~/.venvs/ansible/bin/ansible-galaxy collection install -r requirements.yml
+```
+
+## Antes del primer despliegue
+
+1. En `inventory/group_vars/all/main.yml`, completar lo que dice `CONFIRMAR`:
+   - `vm_admin_user`: el usuario SSH de las VMs.
+   - `team_networks`: el rango de direcciones de la VPN.
+2. Agregar las llaves públicas del equipo en `deploy_user_pubkeys`.
+3. Crear los secretos:
+
+```bash
+cp inventory/group_vars/all/vault.example.yml inventory/group_vars/all/vault.yml
+# llenar los valores
+ansible-vault encrypt inventory/group_vars/all/vault.yml
+```
+
+## Orden recomendado
+
+Primero solo lectura, después en modo simulación y al final de verdad:
+
+```bash
+# 1. Conexión y estado de las VMs (no cambia nada)
+ansible-playbook playbooks/diagnostico.yml -k -K
+
+# 2. Simular la base en una sola VM y revisar qué cambiaría
+ansible-playbook playbooks/setup-base.yml --limit vm5 --check --diff -k -K --ask-vault-pass
+
+# 3. Aplicar en una VM, comprobar que SSH sigue funcionando, y luego en el resto
+ansible-playbook playbooks/setup-base.yml --limit vm5 -k -K --ask-vault-pass
+ansible-playbook playbooks/setup-base.yml -k -K --ask-vault-pass
+
+# 4. Todo lo demás, en el orden de site.yml
+ansible-playbook playbooks/site.yml -k -K --ask-vault-pass
+```
+
+`-k` pide la contraseña SSH y `-K` la de sudo. Cuando las llaves SSH funcionen, se dejan de usar `-k` y se puede poner `ssh_disable_password_auth: true`.
+
+## Playbooks
+
+| Playbook | VM | Qué hace |
+|---|---|---|
+| `diagnostico.yml` | Todas | Solo lectura: sistema, recursos, Docker y ufw |
+| `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
+| `deploy-storage-observability.yml` | VM7 | MinIO, Prometheus, Loki, Grafana y los buckets |
+| `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a MinIO |
+| `deploy-cache.yml` | VM5 | Redis con contraseña |
+| `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
+| `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |
+| `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, MinIO y Nginx, con secretos propios |
+| `deploy-gateway.yml` | VM1 | Nginx con HTTPS autofirmado: `/api/` a VM3 y `/` al panel Angular |
+| `deploy-runner.yml` | VM1 | Runner self-hosted de la organización, kubeconfig de QA y producción, y k6 |
+
+## Decisiones de implementación
+
+- **Contenedores con red de host.** Con puertos publicados, Docker se salta las reglas de `ufw`; con red de host, el firewall de la sección 10.2 sí aplica.
+- **El firewall abre el 22 antes de activarse**, para no perder la conexión.
+- **El login por contraseña sigue activo** hasta poner `ssh_disable_password_auth: true`.
+- **El escritorio remoto (3389) queda abierto para la VPN del equipo**, porque el laboratorio lo usa y activar `ufw` lo bloquearía.
+- **QA no puede llegar a producción:** PostgreSQL, Redis, Kafka y MinIO de producción solo aceptan conexiones desde VM3.
+- **En VM2 y VM3, `ufw` permite el tráfico interno de k3s** (rangos de pods y servicios); sin eso los pods no se comunican.
