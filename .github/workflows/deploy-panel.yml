@@ -1,0 +1,54 @@
+# Publica el build del panel Angular (artefacto `panel` de ci-angular.yml).
+#   produccion → /opt/quickpatch/gateway/panel en VM1, la misma máquina del runner
+#   qa         → /opt/quickpatch/qa/panel en VM2, por SSH con la llave que deja deploy-runner.yml
+# Nginx monta la carpeta, así que se reemplaza el contenido sin reemplazar la carpeta.
+# `tar -m` ignora las fechas de los archivos: los relojes de VM1 y VM2 no están sincronizados.
+#
+# SEGURIDAD: llamarlo solo desde eventos `push`, igual que deploy-k3s.yml.
+name: Despliegue del panel
+
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: qa o produccion
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  desplegar:
+    name: Panel en ${{ inputs.ambiente }}
+    runs-on: [self-hosted, vm1, red-laboratorio]
+    timeout-minutes: 10
+    environment: ${{ inputs.ambiente }}
+    concurrency:
+      group: panel-${{ inputs.ambiente }}
+      cancel-in-progress: false
+    env:
+      AMBIENTE: ${{ inputs.ambiente }}
+      VM2: 10.43.98.15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: panel
+          path: panel
+
+      - name: Publicar
+        run: |
+          case "$AMBIENTE" in
+            produccion)
+              destino=/opt/quickpatch/gateway/panel
+              find "$destino" -mindepth 1 -delete
+              cp -r panel/. "$destino"/
+              ;;
+            qa)
+              destino=/opt/quickpatch/qa/panel
+              tar -C panel -cf - . | ssh -o StrictHostKeyChecking=accept-new "quickpatch@$VM2" \
+                "find $destino -mindepth 1 -delete && tar -m -C $destino -xf -"
+              ;;
+            *) echo "::error::Ambiente desconocido: '$AMBIENTE' (usar qa o produccion)."; exit 1 ;;
+          esac
+          echo "::notice::Panel publicado en $AMBIENTE ($destino)."

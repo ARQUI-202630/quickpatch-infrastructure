@@ -1,0 +1,47 @@
+# CI de este repo: revisa los workflows reutilizables, las plantillas y la sintaxis de Ansible.
+# No toca las VMs: los playbooks se aplican a mano con ansible/ap (ver ansible/README.md).
+name: Revisión de infraestructura
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  workflows:
+    name: Workflows y plantillas (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color \
+            .github/workflows/*.yml plantillas/ci/*.yml
+
+  ansible:
+    name: Sintaxis de Ansible
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Instalar Ansible y colecciones
+        run: |
+          pip install "ansible-core>=2.18,<2.19"
+          ansible-galaxy collection install -r requirements.yml
+      - name: Revisar sintaxis de todos los playbooks
+        run: |
+          for p in playbooks/*.yml; do
+            echo "== $p"
+            ansible-playbook --syntax-check "$p"
+          done

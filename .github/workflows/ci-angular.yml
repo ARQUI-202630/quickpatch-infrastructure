@@ -1,0 +1,86 @@
+# CI del panel administrativo (Angular, ADR-012): lint, pruebas y build.
+# Convención de scripts en package.json:
+#   lint     → revisión estática (ng lint)
+#   test:ci  → pruebas sin modo watch y con navegador headless
+#   build    → build de producción (ng build)
+# Con `artefacto: true`, guarda la carpeta del build como artefacto `panel` para deploy-panel.yml.
+# Si el repo todavía no tiene proyecto Angular, avisa y termina en verde.
+name: CI Angular
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: "22"
+      artefacto:
+        description: Guardar el build como artefacto para desplegarlo
+        type: boolean
+        default: false
+    outputs:
+      hay-proyecto:
+        value: ${{ jobs.ci.outputs.hay }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint, pruebas y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      hay: ${{ steps.proyecto.outputs.hay }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar proyecto Angular
+        id: proyecto
+        run: |
+          if [ -f angular.json ] && [ -f package.json ]; then
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay proyecto Angular (angular.json): se omiten lint, pruebas y build."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.proyecto.outputs.hay == 'true'
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Instalar dependencias
+        if: steps.proyecto.outputs.hay == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.proyecto.outputs.hay == 'true'
+        run: npm run lint
+
+      - name: Pruebas
+        if: steps.proyecto.outputs.hay == 'true'
+        run: npm run test:ci
+
+      - name: Build de producción
+        if: steps.proyecto.outputs.hay == 'true'
+        run: npm run build
+
+      # Angular 17+ deja los archivos en dist/<proyecto>/browser; se busca el index.html.
+      - name: Ubicar el build
+        id: build
+        if: steps.proyecto.outputs.hay == 'true' && inputs.artefacto
+        run: |
+          index=$(find dist -name index.html -not -path '*/server/*' | head -1)
+          if [ -z "$index" ]; then echo "::error::No se encontró index.html dentro de dist/."; exit 1; fi
+          echo "carpeta=$(dirname "$index")" >> "$GITHUB_OUTPUT"
+
+      - name: Guardar el build
+        if: steps.proyecto.outputs.hay == 'true' && inputs.artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel
+          path: ${{ steps.build.outputs.carpeta }}
+          retention-days: 7

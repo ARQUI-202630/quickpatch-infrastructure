@@ -1,0 +1,73 @@
+# CI de la aplicación móvil (Flutter, ADR-012): formato, análisis y pruebas.
+# Con `apk: true` también compila el APK de release y lo guarda como artefacto `apk`.
+# La app no se despliega en las VMs: se distribuye el APK.
+# Si el repo todavía no tiene proyecto Flutter, avisa y termina en verde.
+name: CI Flutter
+
+on:
+  workflow_call:
+    inputs:
+      flutter-channel:
+        type: string
+        default: stable
+      apk:
+        description: Compilar el APK de release
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Análisis y pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar proyecto Flutter
+        id: proyecto
+        run: |
+          if [ -f pubspec.yaml ]; then
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay proyecto Flutter (pubspec.yaml): se omiten análisis y pruebas."
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.proyecto.outputs.hay == 'true'
+        with:
+          channel: ${{ inputs.flutter-channel }}
+          cache: true
+
+      - name: Dependencias
+        if: steps.proyecto.outputs.hay == 'true'
+        run: flutter pub get
+
+      - name: Formato
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Análisis estático
+        if: steps.proyecto.outputs.hay == 'true'
+        run: flutter analyze
+
+      - name: Pruebas
+        if: steps.proyecto.outputs.hay == 'true'
+        run: flutter test
+
+      - name: APK de release
+        if: steps.proyecto.outputs.hay == 'true' && inputs.apk
+        run: flutter build apk --release
+
+      - name: Guardar el APK
+        if: steps.proyecto.outputs.hay == 'true' && inputs.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30

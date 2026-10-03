@@ -1,0 +1,69 @@
+# CI de Matching (Java + Spring Boot, ADR-012): compilación y pruebas.
+# Acepta Maven o Gradle en la raíz del repo; usa el wrapper (mvnw, gradlew) si existe.
+# Maven: `test` corre las unitarias y `verify` también las de integración (Failsafe, *IT.java).
+# Gradle: `test` corre las unitarias y `check` también las de integración.
+# Si el repo todavía no tiene proyecto Java, avisa y termina en verde.
+name: CI Java
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        type: string
+        default: "21"
+      integracion:
+        description: Correr también las pruebas de integración (Testcontainers)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Compilación y pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar proyecto Java
+        id: proyecto
+        run: |
+          if [ -f pom.xml ]; then
+            herramienta=maven
+            if [ -x mvnw ]; then cmd=./mvnw; else cmd=mvn; fi
+          elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
+            herramienta=gradle
+            if [ -x gradlew ]; then cmd=./gradlew; else cmd=gradle; fi
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay proyecto Java (pom.xml o build.gradle): se omiten las pruebas."
+            exit 0
+          fi
+          { echo "hay=true"; echo "herramienta=$herramienta"; echo "cmd=$cmd"; } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        if: steps.proyecto.outputs.hay == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: ${{ steps.proyecto.outputs.herramienta }}
+
+      - name: Pruebas unitarias
+        if: steps.proyecto.outputs.hay == 'true' && !inputs.integracion
+        env:
+          CMD: ${{ steps.proyecto.outputs.cmd }}
+          HERRAMIENTA: ${{ steps.proyecto.outputs.herramienta }}
+        run: |
+          if [ "$HERRAMIENTA" = maven ]; then "$CMD" -B -ntp test; else "$CMD" test; fi
+
+      - name: Pruebas unitarias y de integración (Testcontainers)
+        if: steps.proyecto.outputs.hay == 'true' && inputs.integracion
+        env:
+          CMD: ${{ steps.proyecto.outputs.cmd }}
+          HERRAMIENTA: ${{ steps.proyecto.outputs.herramienta }}
+        run: |
+          if [ "$HERRAMIENTA" = maven ]; then "$CMD" -B -ntp verify; else "$CMD" check; fi

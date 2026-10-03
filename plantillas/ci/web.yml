@@ -1,0 +1,40 @@
+# CI/CD de quickpatch-web (panel Angular). Copiar en el repo como .github/workflows/ci-cd.yml.
+# La lógica vive en quickpatch-infrastructure; aquí solo se decide qué corre en cada rama:
+#   PR a develop        → lint, pruebas y build
+#   push develop        → lo mismo
+#   push release/*      → además, publica el panel en QA (VM2)
+#   push main           → además, publica el panel en producción (VM1)
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop, "release/**", main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/ci-angular.yml@main
+    with:
+      artefacto: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/release/') || github.ref == 'refs/heads/main') }}
+
+  qa:
+    needs: ci
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') && needs.ci.outputs.hay-proyecto == 'true'
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/deploy-panel.yml@main
+    with:
+      ambiente: qa
+
+  produccion:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci.outputs.hay-proyecto == 'true'
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/deploy-panel.yml@main
+    with:
+      ambiente: produccion

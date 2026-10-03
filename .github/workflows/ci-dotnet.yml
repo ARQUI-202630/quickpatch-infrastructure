@@ -1,0 +1,73 @@
+# CI de los servicios ASP.NET Core (ADR-012): formato, compilación y pruebas.
+# Lo llaman los repos de servicio con `uses:` (plantilla en plantillas/ci/servicio-dotnet.yml).
+# Convención: una solución (.sln o .slnx) en la raíz del repo; las pruebas de integración
+# llevan [Trait("Category", "Integration")] y usan Testcontainers.
+# Si el repo todavía no tiene proyecto .NET, avisa y termina en verde.
+name: CI .NET
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        type: string
+        default: "10.0.x"
+      integracion:
+        description: Correr también las pruebas de integración (Testcontainers)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint y pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar proyecto .NET
+        id: proyecto
+        run: |
+          if find . -path ./contracts -prune -o \( -name '*.sln' -o -name '*.slnx' -o -name '*.csproj' \) -print | grep -q .; then
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay proyecto .NET: se omiten lint y pruebas."
+          fi
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.proyecto.outputs.hay == 'true'
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restaurar dependencias
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet restore
+
+      - name: Formato (lint)
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Compilar
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet build --no-restore -c Release
+
+      - name: Pruebas unitarias
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet test --no-build -c Release --filter "Category!=Integration" --logger trx --results-directory resultados
+
+      - name: Pruebas de integración (Testcontainers)
+        if: steps.proyecto.outputs.hay == 'true' && inputs.integracion
+        run: dotnet test --no-build -c Release --filter "Category=Integration" --logger trx --results-directory resultados
+
+      - name: Guardar resultados de las pruebas
+        if: always() && steps.proyecto.outputs.hay == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-dotnet
+          path: resultados
+          if-no-files-found: ignore
