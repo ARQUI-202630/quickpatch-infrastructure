@@ -1,0 +1,48 @@
+# VM7: MinIO (evidencias y respaldos) + Prometheus + Loki + Grafana (secciones 5.2, 7 y 9).
+- name: Storage y observabilidad
+  hosts: storage_observability
+  vars:
+    dir: "{{ stack_dir }}/observabilidad"
+  tasks:
+    - name: Carpetas
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ dir }}", "{{ dir }}/grafana-provisioning/datasources"]
+
+    - name: Configuración de Prometheus, Loki y Grafana
+      ansible.builtin.template:
+        src: "../templates/{{ item.src }}"
+        dest: "{{ dir }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: prometheus.yml.j2, dest: prometheus.yml }
+        - { src: loki.yml.j2, dest: loki.yml }
+        - { src: grafana-datasources.yml.j2, dest: grafana-provisioning/datasources/datasources.yml }
+        - { src: observabilidad.compose.yml.j2, dest: compose.yml }
+      notify: Reiniciar observabilidad
+
+    - name: Levantar MinIO, Prometheus, Loki y Grafana
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: present
+
+    - name: Crear los buckets de evidencias y de respaldos
+      ansible.builtin.command: >
+        docker run --rm --network host
+        -e MC_HOST_minio=http://{{ vault_minio_root_user }}:{{ vault_minio_root_password }}@{{ ansible_host }}:9000
+        {{ images.minio_client }} mb --ignore-existing minio/evidencias minio/backups-postgres
+      register: buckets
+      changed_when: "'created successfully' in buckets.stdout"
+      retries: 5
+      delay: 6
+      until: buckets.rc == 0
+      no_log: true
+      when: object_storage_enabled
+
+  handlers:
+    - name: Reiniciar observabilidad
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: restarted

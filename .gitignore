@@ -1,0 +1,6 @@
+# Secretos: nunca al repositorio (Documento de Infraestructura, sección 8)
+ansible/.secretos/
+ansible/inventory/group_vars/all/vault.yml
+ansible/.vault-pass
+ansible/collections/
+*.retry

@@ -1,0 +1,12 @@
+-- Se ejecuta solo la primera vez que se crea el volumen de datos.
+REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
+{% for db in postgres_databases %}
+CREATE ROLE app_{{ db }} LOGIN PASSWORD '{{ vault_service_db_passwords[db] }}';
+CREATE DATABASE db_{{ db }} OWNER app_{{ db }};
+REVOKE CONNECT ON DATABASE db_{{ db }} FROM PUBLIC;
+{% if db in postgis_databases %}
+\connect db_{{ db }}
+CREATE EXTENSION IF NOT EXISTS postgis;
+\connect postgres
+{% endif %}
+{% endfor %}

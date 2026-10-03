@@ -1,0 +1,34 @@
+# Reglas de firewall (Documento de Infraestructura, sección 10.2).
+# Política: denegar todo lo entrante; solo se abren estos pares origen-puerto.
+# Los contenedores usan red de host para que ufw sí controle su tráfico
+# (con puertos publicados, Docker se salta las reglas de ufw).
+all_vms: "{{ ip.values() | list }}"
+
+firewall_common:
+  - { port: 9100, from: ["{{ ip.vm7 }}"], comment: "Prometheus -> node_exporter" }
+  - { port: 3389, from: "{{ team_networks }}", comment: "Escritorio remoto (xrdp) del equipo" }
+  - { port: 10050, from: "{{ lab_networks }}", comment: "Agente Zabbix del laboratorio" }
+
+firewall_by_host:
+  vm1:
+    - { port: 443, from: [any], comment: "HTTPS publico (unico punto de entrada)" }
+  vm2:   # QA (ADR-015). Producción no acepta conexiones desde VM2: sus reglas solo admiten a VM3.
+    - { port: 443, from: "{{ team_networks + [ip.vm1] }}", comment: "Equipo y k6 (runner de VM1) -> QA" }
+    - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s de QA" }
+  vm3:
+    - { port: 30080, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTP)" }
+    - { port: 30443, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTPS)" }
+    - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s" }
+  vm4:
+    - { port: 5432, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> PostgreSQL" }
+  vm5:
+    - { port: 6379, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Redis" }
+  vm6:
+    - { port: 9092, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Kafka" }
+    - { port: 8080, from: "{{ team_networks }}", comment: "Equipo -> Kafka UI" }
+  vm7:
+    - { port: 9000, from: ["{{ ip.vm3 }}", "{{ ip.vm4 }}"], comment: "Evidencias y backup -> MinIO" }
+    - { port: 3100, from: "{{ all_vms }}", comment: "Promtail -> Loki" }
+    - { port: 3000, from: "{{ team_networks }}", comment: "Equipo -> Grafana" }
+    - { port: 9090, from: "{{ team_networks }}", comment: "Equipo -> Prometheus" }
+    - { port: 9001, from: "{{ team_networks }}", comment: "Equipo -> consola de MinIO" }

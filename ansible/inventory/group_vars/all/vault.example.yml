@@ -1,0 +1,26 @@
+# Plantilla de secretos (sección 8). NO guardar valores reales aquí.
+# Copiar a vault.yml, llenar y cifrar:
+#   cp vault.example.yml vault.yml
+#   ansible-vault encrypt vault.yml
+vault_postgres_superuser_password: CAMBIAR
+vault_service_db_passwords:          # una por base de postgres_databases
+  identity: CAMBIAR
+  actors: CAMBIAR
+  catalog: CAMBIAR
+  service_request: CAMBIAR
+  matching: CAMBIAR
+  ranking: CAMBIAR
+  payments: CAMBIAR
+  communication: CAMBIAR
+vault_redis_password: CAMBIAR
+vault_minio_root_user: CAMBIAR
+vault_minio_root_password: CAMBIAR
+vault_grafana_admin_password: CAMBIAR
+vault_github_runner_token: CAMBIAR   # token de registro del runner, a nivel de organización
+
+# QA (ADR-015): secretos propios, nunca los de producción
+vault_qa_postgres_superuser_password: CAMBIAR
+vault_qa_service_db_password: CAMBIAR   # una sola para las bases de QA
+vault_qa_redis_password: CAMBIAR
+vault_qa_minio_root_user: CAMBIAR
+vault_qa_minio_root_password: CAMBIAR

@@ -1,0 +1,25 @@
+# VM5: Redis (sección 5.2). Solo escucha en la IP de la VM y exige contraseña.
+- name: Cache
+  hosts: cache
+  vars:
+    dir: "{{ stack_dir }}/redis"
+  tasks:
+    - name: Carpeta
+      ansible.builtin.file: { path: "{{ dir }}", state: directory, mode: "0750" }
+    - name: Compose de Redis
+      ansible.builtin.copy:
+        dest: "{{ dir }}/compose.yml"
+        mode: "0640"
+        content: |
+          services:
+            redis:
+              image: {{ images.redis }}
+              network_mode: host
+              restart: unless-stopped
+              command: >
+                redis-server --bind {{ ansible_host }} --port 6379
+                --requirepass {{ vault_redis_password }}
+                --maxmemory 6gb --maxmemory-policy allkeys-lru
+                --appendonly no
+    - name: Levantar Redis
+      community.docker.docker_compose_v2: { project_src: "{{ dir }}", state: present }

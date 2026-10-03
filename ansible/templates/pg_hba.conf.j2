@@ -1,0 +1,7 @@
+# Local (respaldo y administración desde VM4)
+local   all   postgres                    peer
+host    all   postgres   127.0.0.1/32     scram-sha-256
+# Cada servicio solo entra a su propia base, y solo desde VM3 (k3s)
+{% for db in postgres_databases %}
+host    db_{{ db }}   app_{{ db }}   {{ ip.vm3 }}/32   scram-sha-256
+{% endfor %}

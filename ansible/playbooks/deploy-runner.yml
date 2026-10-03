@@ -1,0 +1,85 @@
+# VM1: runner self-hosted de GitHub Actions, registrado en la organización (sección 6.3).
+# Despliega a QA (VM2) y a producción (VM3), y corre la prueba de carga con k6 contra QA.
+# Está en la red privada, donde los runners de GitHub no llegan.
+# SEGURIDAD: en GitHub, restringir este runner a los repos de QUICKPATCH (grupo de runners)
+# y no usarlo nunca en workflows disparados por pull_request de forks.
+- name: Runner de despliegue
+  hosts: gateway
+  vars:
+    runner_version: 2.321.0
+    runner_dir: /opt/actions-runner
+    k6_version: v0.55.0
+  tasks:
+    - name: kubectl {{ k3s_version | regex_replace('\+.*','') }}
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ k3s_version | regex_replace('\\+.*','') }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    - name: Carpeta del kubeconfig
+      ansible.builtin.file:
+        path: "/home/{{ deploy_user }}/.kube"
+        state: directory
+        owner: "{{ deploy_user }}"
+        mode: "0700"
+
+    - name: kubeconfig de QA y de producción (apuntan a la IP de cada VM, no a 127.0.0.1)
+      ansible.builtin.copy:
+        content: "{{ lookup('file', '../.secretos/kubeconfig-' ~ item.nombre ~ '.yaml') | replace('127.0.0.1', item.ip) }}"
+        dest: "/home/{{ deploy_user }}/.kube/config-{{ item.nombre }}"
+        owner: "{{ deploy_user }}"
+        mode: "0600"
+      loop:
+        - { nombre: qa, ip: "{{ ip.vm2 }}" }
+        - { nombre: produccion, ip: "{{ ip.vm3 }}" }
+      loop_control:
+        label: "{{ item.nombre }}"
+
+    - name: k6 {{ k6_version }} para la prueba de carga en QA
+      ansible.builtin.unarchive:
+        src: "https://github.com/grafana/k6/releases/download/{{ k6_version }}/k6-{{ k6_version }}-linux-amd64.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        extra_opts: [--strip-components=1, --wildcards, "*/k6"]
+        creates: /usr/local/bin/k6
+
+    - name: Carpeta del runner
+      ansible.builtin.file:
+        path: "{{ runner_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        mode: "0755"
+
+    - name: Descargar el runner {{ runner_version }}
+      ansible.builtin.unarchive:
+        src: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+        dest: "{{ runner_dir }}"
+        remote_src: true
+        owner: "{{ deploy_user }}"
+        creates: "{{ runner_dir }}/config.sh"
+
+    - name: Registrar el runner en ARQUI-202630
+      ansible.builtin.command: >
+        ./config.sh --unattended --url https://github.com/ARQUI-202630
+        --token {{ vault_github_runner_token }}
+        --name vm1-despliegue --labels self-hosted,vm1,red-laboratorio --replace
+      args:
+        chdir: "{{ runner_dir }}"
+        creates: "{{ runner_dir }}/.runner"
+      become_user: "{{ deploy_user }}"
+      no_log: true
+      when: vault_github_runner_token != 'CAMBIAR'
+
+    - name: Runner como servicio del sistema
+      ansible.builtin.command: ./svc.sh install {{ deploy_user }}
+      args:
+        chdir: "{{ runner_dir }}"
+        creates: "/etc/systemd/system/actions.runner.ARQUI-202630.vm1-despliegue.service"
+      when: vault_github_runner_token != 'CAMBIAR'
+
+    - name: Iniciar el runner
+      ansible.builtin.command: ./svc.sh start
+      args:
+        chdir: "{{ runner_dir }}"
+      changed_when: false
+      when: vault_github_runner_token != 'CAMBIAR'

@@ -1,0 +1,62 @@
+# VM4: PostgreSQL + PostGIS (secciones 5.2, 5.7 y 9.2).
+- name: Base de datos
+  hosts: database
+  vars:
+    dir: "{{ stack_dir }}/postgres"
+  tasks:
+    - name: Carpetas
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop: ["{{ dir }}", "{{ dir }}/backups"]
+
+    # El contenedor lee este script con el usuario postgres (uid 999). Tiene contraseñas: solo él lo lee.
+    - name: Carpeta del script de inicialización
+      ansible.builtin.file: { path: "{{ dir }}/init", state: directory, owner: "999", mode: "0700" }
+
+    - name: Script de inicialización (bases, roles y PostGIS)
+      ansible.builtin.template:
+        src: ../templates/postgres-init.sql.j2
+        dest: "{{ dir }}/init/01-quickpatch.sql"
+        owner: "999"
+        mode: "0600"
+
+    - name: Acceso solo desde VM3, cada rol a su propia base
+      ansible.builtin.template:
+        src: ../templates/pg_hba.conf.j2
+        dest: "{{ dir }}/pg_hba.conf"
+        mode: "0644"
+      notify: Reiniciar PostgreSQL
+
+    - name: Compose de PostgreSQL
+      ansible.builtin.template:
+        src: ../templates/postgres.compose.yml.j2
+        dest: "{{ dir }}/compose.yml"
+        mode: "0640"
+      notify: Reiniciar PostgreSQL
+
+    - name: Levantar PostgreSQL
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: present
+
+    - name: Script de respaldo diario a MinIO (sección 9.2)
+      ansible.builtin.template:
+        src: ../templates/pg-backup.sh.j2
+        dest: /usr/local/bin/quickpatch-pg-backup
+        mode: "0750"
+
+    - name: Respaldo diario a las 2:00
+      when: object_storage_enabled
+      ansible.builtin.cron:
+        name: quickpatch-pg-backup
+        hour: "2"
+        minute: "0"
+        job: /usr/local/bin/quickpatch-pg-backup >> /var/log/quickpatch-pg-backup.log 2>&1
+
+  handlers:
+    - name: Reiniciar PostgreSQL
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: restarted

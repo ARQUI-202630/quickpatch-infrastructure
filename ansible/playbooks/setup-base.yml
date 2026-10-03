@@ -1,0 +1,84 @@
+# Base común (sección 5.2): paquetes, usuario de despliegue, SSH, Docker, firewall
+# y agentes de observabilidad (node_exporter y Promtail).
+# Soporta Ubuntu 22.04 (VM1, VM3, VM4, VM6, VM7) y Rocky Linux 9 (VM2 y VM5).
+- name: Base común
+  hosts: all
+  vars:
+    vm_rules: "{{ firewall_common + (firewall_by_host[inventory_hostname] | default([])) }}"
+    admin_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'sudo' }}"
+    ssh_service: "{{ 'sshd' if ansible_os_family == 'RedHat' else 'ssh' }}"
+  tasks:
+    - name: Paquetes, Docker y firewall según el sistema
+      ansible.builtin.include_tasks: "../tasks/base-{{ ansible_os_family | lower }}.yml"
+
+    - name: Zona horaria de Bogotá
+      community.general.timezone:
+        name: America/Bogota
+
+    - name: Usuario de despliegue
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        groups: ["{{ admin_group }}", docker]
+        append: true
+
+    - name: Llaves SSH del equipo para el usuario de despliegue
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ item }}"
+      loop: "{{ deploy_user_pubkeys }}"
+
+    - name: SSH sin login de root
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-quickpatch.conf
+        mode: "0644"
+        content: |
+          PermitRootLogin no
+          {% if ssh_disable_password_auth %}
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          {% endif %}
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Reiniciar SSH
+
+    - name: Rotación de logs de contenedores
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+        content: |
+          { "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "3" } }
+      notify: Reiniciar Docker
+
+    - name: Carpeta de agentes
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/agentes"
+        state: directory
+        mode: "0755"
+
+    - name: Configuración de los agentes
+      ansible.builtin.template:
+        src: "../templates/{{ item.src }}"
+        dest: "{{ stack_dir }}/agentes/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: promtail.yml.j2, dest: promtail.yml }
+        - { src: agentes.compose.yml.j2, dest: compose.yml }
+      notify: Reiniciar agentes
+
+    - name: Aplicar cambios pendientes de Docker antes de levantar contenedores
+      ansible.builtin.meta: flush_handlers
+
+    - name: Levantar node_exporter y Promtail
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}/agentes"
+        state: present
+
+  handlers:
+    - name: Reiniciar SSH
+      ansible.builtin.service: { name: "{{ ssh_service }}", state: restarted }
+    - name: Reiniciar Docker
+      ansible.builtin.service: { name: docker, state: restarted }
+    - name: Reiniciar agentes
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}/agentes"
+        state: restarted
