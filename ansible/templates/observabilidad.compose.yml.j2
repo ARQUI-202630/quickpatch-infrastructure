@@ -41,6 +41,7 @@ services:
     environment:
       GF_SERVER_HTTP_ADDR: {{ ansible_host }}
       GF_SERVER_HTTP_PORT: "3000"
+      GF_SERVER_ROOT_URL: "https://{{ gateway_hosts.grafana }}/"   # se entra por el gateway de VM1 (ADR-015)
       GF_SECURITY_ADMIN_PASSWORD: "{{ vault_grafana_admin_password }}"
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:

@@ -31,6 +31,17 @@ ip:
 # --- Rutas --------------------------------------------------------------------
 stack_dir: /opt/quickpatch
 
+# --- Gateway (VM1) ------------------------------------------------------------
+# VM1:443 es el único puerto que el firewall perimetral de la universidad deja pasar
+# desde la VPN (observado el 2026-10-03: VM7:3000, VM7:9090 y VM2:443 no pasan).
+# Nginx elige el destino por el nombre pedido (ADR-015). No hay DNS: cada persona
+# agrega a su archivo hosts una línea con los tres nombres apuntando a VM1.
+gateway_domain: quickpatch.internal
+gateway_hosts:
+  produccion: "{{ gateway_domain }}"
+  qa: "qa.{{ gateway_domain }}"
+  grafana: "grafana.{{ gateway_domain }}"
+
 # --- Versiones fijadas ---------------------------------------------------------
 images:
   postgis: postgis/postgis:16-3.4

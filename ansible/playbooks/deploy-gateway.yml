@@ -23,14 +23,21 @@
         force: false
         content: "<!doctype html><title>QUICKPATCH</title><p>Panel administrativo: pendiente del primer build de Angular.</p>\n"
 
-    - name: Certificado autofirmado (10 años, nombre quickpatch.internal)
+    - name: Nombres que cubre el certificado actual
+      ansible.builtin.command: openssl x509 -noout -ext subjectAltName -in {{ dir }}/certs/quickpatch.crt
+      register: cert_actual
+      changed_when: false
+      failed_when: false
+
+    # Se regenera solo si falta alguno de los nombres de gateway_hosts.
+    - name: Certificado autofirmado (10 años, un nombre por destino del gateway)
       ansible.builtin.command: >
         openssl req -x509 -nodes -newkey rsa:4096 -days 3650
         -keyout {{ dir }}/certs/quickpatch.key -out {{ dir }}/certs/quickpatch.crt
-        -subj "/CN=quickpatch.internal"
-        -addext "subjectAltName=DNS:quickpatch.internal,IP:{{ ansible_host }}"
-      args:
-        creates: "{{ dir }}/certs/quickpatch.crt"
+        -subj "/CN={{ gateway_domain }}"
+        -addext "subjectAltName={{ gateway_hosts.values() | map('regex_replace', '^', 'DNS:') | join(',') }},IP:{{ ansible_host }}"
+      when: cert_actual.rc != 0 or (gateway_hosts.values() | reject('in', cert_actual.stdout) | list | length > 0)
+      notify: Recargar gateway
 
     - name: Configuración de Nginx
       ansible.builtin.template:

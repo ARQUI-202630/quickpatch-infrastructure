@@ -71,8 +71,26 @@ ansible-playbook playbooks/site.yml -k -K --ask-vault-pass
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
 | `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |
 | `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, MinIO y Nginx, con secretos propios |
-| `deploy-gateway.yml` | VM1 | Nginx con HTTPS autofirmado: `/api/` a VM3 y `/` al panel Angular |
+| `deploy-gateway.yml` | VM1 | Nginx con HTTPS autofirmado: producción (`/api/` a VM3 y `/` al panel Angular), QA (VM2) y Grafana (VM7) |
 | `deploy-runner.yml` | VM1 | Runner self-hosted de la organización, kubeconfig de QA y producción, y k6 |
+
+## Entrar a producción, QA y Grafana
+
+Desde la VPN, el firewall perimetral de la universidad solo deja pasar el 443 de VM1. Por eso VM1 reenvía cada nombre a su destino (ADR-015):
+
+| Dirección | Destino | Quién entra |
+|---|---|---|
+| `https://quickpatch.internal` (o la IP de VM1) | Producción: panel y `/api/` | Cualquiera |
+| `https://qa.quickpatch.internal` | QA en VM2 | Solo la red del equipo (`team_networks`) |
+| `https://grafana.quickpatch.internal` | Grafana en VM7 | Solo la red del equipo, con login |
+
+No hay DNS, así que cada persona agrega esta línea una vez a su archivo hosts (`C:\Windows\System32\drivers\etc\hosts` en Windows, abierto como administrador; `/etc/hosts` en Linux y macOS):
+
+```
+10.43.100.168  quickpatch.internal  qa.quickpatch.internal  grafana.quickpatch.internal
+```
+
+El certificado es autofirmado: el navegador muestra una advertencia la primera vez. Prometheus no se publica; sus datos se ven desde Grafana. Si VM1 se cae, el acceso de respaldo es un túnel SSH a otra VM, por ejemplo `ssh -L 3000:10.43.99.8:3000 estudiante@10.43.99.8`.
 
 ## Decisiones de implementación
 
