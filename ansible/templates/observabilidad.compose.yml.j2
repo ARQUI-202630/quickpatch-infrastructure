@@ -1,18 +1,14 @@
-# Red de host: ufw controla los puertos 9000, 9001, 3100, 3000 y 9090.
+# Red de host: ufw controla los puertos 9000 (S3 de Garage), 3100, 3000 y 9090.
 services:
-{% if object_storage_enabled %}
-  minio:
-    image: {{ images.minio }}
+  garage:
+    image: {{ images.garage }}
     network_mode: host
     restart: unless-stopped
-    command: server /data --address {{ ansible_host }}:9000 --console-address {{ ansible_host }}:9001
-    environment:
-      MINIO_ROOT_USER: "{{ vault_minio_root_user }}"
-      MINIO_ROOT_PASSWORD: "{{ vault_minio_root_password }}"
     volumes:
-      - minio-data:/data
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
 
-{% endif %}
   prometheus:
     image: {{ images.prometheus }}
     network_mode: host
@@ -49,9 +45,8 @@ services:
       - grafana-data:/var/lib/grafana
 
 volumes:
-{% if object_storage_enabled %}
-  minio-data:
-{% endif %}
+  garage-meta:
+  garage-data:
   prometheus-data:
   loki-data:
   grafana-data:

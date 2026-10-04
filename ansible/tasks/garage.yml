@@ -1,0 +1,64 @@
+# Almacenamiento de objetos con Garage (ADR-016), compartido por VM7 (producción) y VM2 (QA).
+# Se incluye después de levantar el compose que trae el servicio `garage`. Variables:
+#   garage_compose_dir → carpeta del compose
+#   garage_capacidad   → capacidad declarada del nodo (por ejemplo 30G)
+#   garage_llaves      → {nombre: {id, secret}} desde el vault
+#   garage_permisos    → [{bucket, llave}]: cada llave solo ve sus buckets
+- name: Esperar a que Garage responda
+  ansible.builtin.command: >
+    docker compose -f {{ garage_compose_dir }}/compose.yml exec -T -e RUST_LOG=warn garage /garage status
+  register: garage_status
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: garage_status.rc == 0
+
+- name: Asignar el nodo único al layout
+  ansible.builtin.shell: |
+    set -o pipefail
+    G="docker compose -f {{ garage_compose_dir }}/compose.yml exec -T -e RUST_LOG=warn garage /garage"
+    id=$($G node id -q | grep -o '^[0-9a-f]\{64\}')
+    $G layout assign -z dc1 -c {{ garage_capacidad }} "${id:0:16}"
+    $G layout apply --version 1
+  args:
+    executable: /bin/bash
+  when: "'NO ROLE ASSIGNED' in garage_status.stdout"
+  changed_when: true
+
+- name: Llaves de acceso
+  ansible.builtin.shell: |
+    G="docker compose -f {{ garage_compose_dir }}/compose.yml exec -T -e RUST_LOG=warn garage /garage"
+    if $G key info "{{ item.value.id }}" > /dev/null 2>&1; then
+      echo existe
+    else
+      $G key import --yes -n "{{ item.key }}" "{{ item.value.id }}" "{{ item.value.secret }}" > /dev/null && echo importada
+    fi
+  args:
+    executable: /bin/bash
+  register: garage_llave
+  changed_when: "'importada' in garage_llave.stdout"
+  failed_when: garage_llave.rc != 0
+  loop: "{{ garage_llaves | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+
+- name: Buckets
+  ansible.builtin.shell: |
+    G="docker compose -f {{ garage_compose_dir }}/compose.yml exec -T -e RUST_LOG=warn garage /garage"
+    if $G bucket info "{{ item }}" > /dev/null 2>&1; then echo existe; else $G bucket create "{{ item }}" > /dev/null && echo creado; fi
+  args:
+    executable: /bin/bash
+  register: garage_bucket
+  changed_when: "'creado' in garage_bucket.stdout"
+  failed_when: garage_bucket.rc != 0
+  loop: "{{ garage_permisos | map(attribute='bucket') | unique }}"
+
+- name: Permisos de lectura y escritura por llave
+  ansible.builtin.command: >
+    docker compose -f {{ garage_compose_dir }}/compose.yml exec -T -e RUST_LOG=warn garage
+    /garage bucket allow --read --write {{ item.bucket }} --key {{ item.llave }}
+  changed_when: false
+  loop: "{{ garage_permisos }}"
+  loop_control:
+    label: "{{ item.llave }} → {{ item.bucket }}"
