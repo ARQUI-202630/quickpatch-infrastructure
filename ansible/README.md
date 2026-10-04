@@ -65,12 +65,12 @@ ansible-playbook playbooks/site.yml -k -K --ask-vault-pass
 |---|---|---|
 | `diagnostico.yml` | Todas | Solo lectura: sistema, recursos, Docker y ufw |
 | `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
-| `deploy-storage-observability.yml` | VM7 | MinIO, Prometheus, Loki, Grafana y los buckets |
-| `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a MinIO |
+| `deploy-storage-observability.yml` | VM7 | Garage (S3), Prometheus, Loki y Grafana; buckets y llaves de Garage |
+| `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
 | `deploy-cache.yml` | VM5 | Redis con contraseña |
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
 | `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |
-| `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, MinIO y Nginx, con secretos propios |
+| `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, Garage y Nginx, con secretos propios |
 | `deploy-gateway.yml` | VM1 | Nginx con HTTPS autofirmado: producción (`/api/` a VM3 y `/` al panel Angular), QA (VM2) y Grafana (VM7) |
 | `deploy-runner.yml` | VM1 | Runner self-hosted de la organización, kubeconfig de QA y producción, y k6 |
 
@@ -98,5 +98,6 @@ El certificado es autofirmado: el navegador muestra una advertencia la primera v
 - **El firewall abre el 22 antes de activarse**, para no perder la conexión.
 - **El login por contraseña sigue activo** hasta poner `ssh_disable_password_auth: true`.
 - **El escritorio remoto (3389) queda abierto para la VPN del equipo**, porque el laboratorio lo usa y activar `ufw` lo bloquearía.
-- **QA no puede llegar a producción:** PostgreSQL, Redis, Kafka y MinIO de producción solo aceptan conexiones desde VM3.
+- **QA no puede llegar a producción:** PostgreSQL, Redis, Kafka y Garage de producción solo aceptan conexiones desde VM3 (y Garage, también desde VM4 para el respaldo).
+- **Garage con una llave por uso:** `servicios` solo accede a `evidencias` y `backups` solo a `backups-postgres`. Las llaves se definen en el vault y el playbook las importa (`tasks/garage.yml`).
 - **En VM2 y VM3, `ufw` permite el tráfico interno de k3s** (rangos de pods y servicios); sin eso los pods no se comunican.

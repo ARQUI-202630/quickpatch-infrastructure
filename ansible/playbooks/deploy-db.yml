@@ -41,14 +41,13 @@
         project_src: "{{ dir }}"
         state: present
 
-    - name: Script de respaldo diario a MinIO (sección 9.2)
+    - name: Script de respaldo diario a Garage en VM7 (sección 9.2)
       ansible.builtin.template:
         src: ../templates/pg-backup.sh.j2
         dest: /usr/local/bin/quickpatch-pg-backup
         mode: "0750"
 
     - name: Respaldo diario a las 2:00
-      when: object_storage_enabled
       ansible.builtin.cron:
         name: quickpatch-pg-backup
         hour: "2"

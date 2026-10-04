@@ -1,8 +1,16 @@
-# VM7: MinIO (evidencias y respaldos) + Prometheus + Loki + Grafana (secciones 5.2, 7 y 9).
+# VM7: Garage (evidencias y respaldos, ADR-016) + Prometheus + Loki + Grafana (secciones 5.2, 7 y 9).
 - name: Storage y observabilidad
   hosts: storage_observability
   vars:
     dir: "{{ stack_dir }}/observabilidad"
+    garage_compose_dir: "{{ dir }}"
+    garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
+    garage_admin_token: "{{ vault_garage_admin_token }}"
+    garage_capacidad: 30G
+    garage_llaves: "{{ vault_garage_keys }}"
+    garage_permisos:
+      - { bucket: evidencias, llave: servicios }
+      - { bucket: backups-postgres, llave: backups }
   tasks:
     - name: Carpetas
       ansible.builtin.file:
@@ -23,23 +31,20 @@
         - { src: observabilidad.compose.yml.j2, dest: compose.yml }
       notify: Reiniciar observabilidad
 
-    - name: Levantar MinIO, Prometheus, Loki y Grafana
+    - name: Configuración de Garage (lleva secretos)
+      ansible.builtin.template:
+        src: ../templates/garage.toml.j2
+        dest: "{{ dir }}/garage.toml"
+        mode: "0600"
+      notify: Reiniciar observabilidad
+
+    - name: Levantar Garage, Prometheus, Loki y Grafana
       community.docker.docker_compose_v2:
         project_src: "{{ dir }}"
         state: present
 
-    - name: Crear los buckets de evidencias y de respaldos
-      ansible.builtin.command: >
-        docker run --rm --network host
-        -e MC_HOST_minio=http://{{ vault_minio_root_user }}:{{ vault_minio_root_password }}@{{ ansible_host }}:9000
-        {{ images.minio_client }} mb --ignore-existing minio/evidencias minio/backups-postgres
-      register: buckets
-      changed_when: "'created successfully' in buckets.stdout"
-      retries: 5
-      delay: 6
-      until: buckets.rc == 0
-      no_log: true
-      when: object_storage_enabled
+    - name: Layout, llaves y buckets de Garage
+      ansible.builtin.include_tasks: ../tasks/garage.yml
 
   handlers:
     - name: Reiniciar observabilidad

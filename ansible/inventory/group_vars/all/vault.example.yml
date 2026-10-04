@@ -13,8 +13,12 @@ vault_service_db_passwords:          # una por base de postgres_databases
   payments: CAMBIAR
   communication: CAMBIAR
 vault_redis_password: CAMBIAR
-vault_minio_root_user: CAMBIAR
-vault_minio_root_password: CAMBIAR
+# Garage (ADR-016). rpc_secret: 64 hex. Llaves: id = "GK" + 24 hex; secret = 64 hex.
+vault_garage_rpc_secret: CAMBIAR
+vault_garage_admin_token: CAMBIAR
+vault_garage_keys:
+  servicios: { id: CAMBIAR, secret: CAMBIAR }   # evidencias (los servicios de VM3)
+  backups: { id: CAMBIAR, secret: CAMBIAR }     # respaldos de PostgreSQL (VM4)
 vault_grafana_admin_password: CAMBIAR
 vault_github_runner_token: CAMBIAR   # token de registro del runner, a nivel de organización
 
@@ -22,5 +26,7 @@ vault_github_runner_token: CAMBIAR   # token de registro del runner, a nivel de 
 vault_qa_postgres_superuser_password: CAMBIAR
 vault_qa_service_db_password: CAMBIAR   # una sola para las bases de QA
 vault_qa_redis_password: CAMBIAR
-vault_qa_minio_root_user: CAMBIAR
-vault_qa_minio_root_password: CAMBIAR
+vault_qa_garage_rpc_secret: CAMBIAR
+vault_qa_garage_admin_token: CAMBIAR
+vault_qa_garage_keys:
+  servicios: { id: CAMBIAR, secret: CAMBIAR }

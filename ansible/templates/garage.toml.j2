@@ -1,0 +1,19 @@
+# Garage (ADR-016): un solo nodo. La API S3 escucha en la IP de la VM; RPC y administración
+# solo en localhost, así que no necesitan reglas de firewall.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+replication_factor = 1
+
+rpc_bind_addr = "127.0.0.1:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "{{ garage_rpc_secret }}"
+
+[s3_api]
+s3_region = "{{ garage_region }}"
+api_bind_addr = "{{ ansible_host }}:9000"
+root_domain = ".s3.{{ gateway_domain }}"
+
+[admin]
+api_bind_addr = "127.0.0.1:3903"
+admin_token = "{{ garage_admin_token }}"

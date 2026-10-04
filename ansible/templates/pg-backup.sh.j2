@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Respaldo diario de PostgreSQL a MinIO (VM7), una copia por base. Retención: {{ backup_retention_days }} días.
+# Respaldo diario de PostgreSQL a Garage (VM7, ADR-016), una copia por base.
+# Retención: {{ backup_retention_days }} días en Garage y 2 días en disco local.
 set -euo pipefail
 FECHA=$(date +%Y-%m-%d)
 DIR={{ stack_dir }}/postgres/backups/$FECHA
@@ -9,11 +10,16 @@ $PG pg_dumpall -U postgres --globals-only > "$DIR/globales.sql"
 {% for db in postgres_databases %}
 $PG pg_dump -U postgres -Fc db_{{ db }} > "$DIR/db_{{ db }}.dump"
 {% endfor %}
-docker run --rm --network host -v "$DIR":/data \
-  -e MC_HOST_minio="http://{{ vault_minio_root_user }}:{{ vault_minio_root_password }}@{{ ip.vm7 }}:9000" \
-  {{ images.minio_client }} mirror --overwrite /data minio/backups-postgres/$FECHA
-docker run --rm --network host \
-  -e MC_HOST_minio="http://{{ vault_minio_root_user }}:{{ vault_minio_root_password }}@{{ ip.vm7 }}:9000" \
-  {{ images.minio_client }} rm --recursive --force --older-than {{ backup_retention_days }}d minio/backups-postgres/ || true
+# La llave `backups` solo tiene acceso al bucket backups-postgres.
+AWS=(docker run --rm --network host -v "{{ stack_dir }}/postgres/backups:/backups:ro"
+  -e AWS_ACCESS_KEY_ID="{{ vault_garage_keys.backups.id }}"
+  -e AWS_SECRET_ACCESS_KEY="{{ vault_garage_keys.backups.secret }}"
+  -e AWS_DEFAULT_REGION="{{ garage_region }}"
+  {{ images.aws_cli }} --endpoint-url "http://{{ ip.vm7 }}:9000")
+"${AWS[@]}" s3 sync "/backups/$FECHA" "s3://backups-postgres/$FECHA/" --only-show-errors
+LIMITE=$(date -d "-{{ backup_retention_days }} days" +%Y-%m-%d)
+for dia in $("${AWS[@]}" s3 ls s3://backups-postgres/ | awk '/PRE/ {print $2}' | tr -d /); do
+  if [[ "$dia" < "$LIMITE" ]]; then "${AWS[@]}" s3 rm --recursive --only-show-errors "s3://backups-postgres/$dia/"; fi
+done
 find {{ stack_dir }}/postgres/backups -mindepth 1 -maxdepth 1 -type d -mtime +2 -exec rm -rf {} +
 echo "$(date -Is) respaldo $FECHA completo"

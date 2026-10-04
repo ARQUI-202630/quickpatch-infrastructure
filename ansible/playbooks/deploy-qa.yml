@@ -1,6 +1,6 @@
 # VM2: ambiente de QA (ADR-015). El sistema completo en una sola VM:
 # - k3s con los 8 microservicios, igual que producción (prueba también el rolling update).
-# - PostgreSQL, Redis, Kafka y MinIO propios, con datos de prueba y secretos propios.
+# - PostgreSQL, Redis, Kafka y Garage (S3) propios, con datos de prueba y secretos propios.
 # - Nginx con HTTPS autofirmado como entrada: /api/ a k3s y / al panel Angular.
 # Logs y métricas van a VM7 (setup-base.yml). La prueba de carga con k6 se hace aquí.
 - name: Ambiente de QA
@@ -9,6 +9,13 @@
     dir: "{{ stack_dir }}/qa"
     k3s_namespace: quickpatch
     kubeconfig_name: qa
+    garage_compose_dir: "{{ dir }}"
+    garage_rpc_secret: "{{ vault_qa_garage_rpc_secret }}"
+    garage_admin_token: "{{ vault_qa_garage_admin_token }}"
+    garage_capacidad: 10G
+    garage_llaves: "{{ vault_qa_garage_keys }}"
+    garage_permisos:
+      - { bucket: evidencias, llave: servicios }
   tasks:
     - name: Instalar k3s
       ansible.builtin.include_tasks: ../tasks/k3s.yml
@@ -53,6 +60,7 @@
         - { src: qa-pg_hba.conf.j2, dest: pg_hba.conf }
         - { src: qa-nginx.conf.j2, dest: nginx.conf }
         - { src: qa.compose.yml.j2, dest: compose.yml, mode: "0600" }
+        - { src: garage.toml.j2, dest: garage.toml, mode: "0600" }
       notify: Reiniciar QA
 
     - name: Levantar los componentes de QA
@@ -60,18 +68,8 @@
         project_src: "{{ dir }}"
         state: present
 
-    - name: Buckets de QA
-      ansible.builtin.command: >
-        docker run --rm --network host
-        -e MC_HOST_minio=http://{{ vault_qa_minio_root_user }}:{{ vault_qa_minio_root_password }}@127.0.0.1:9000
-        {{ images.minio_client }} mb --ignore-existing minio/evidencias
-      register: buckets
-      changed_when: "'created successfully' in buckets.stdout"
-      retries: 5
-      delay: 6
-      until: buckets.rc == 0
-      no_log: true
-      when: object_storage_enabled
+    - name: Layout, llaves y buckets de Garage
+      ansible.builtin.include_tasks: ../tasks/garage.yml
 
   handlers:
     - name: Reiniciar QA
