@@ -6,7 +6,7 @@
 - name: Runner de despliegue
   hosts: gateway
   vars:
-    runner_version: 2.321.0
+    runner_version: 2.337.0   # GitHub rechaza runners con versiones muy viejas; revisar antes de registrar
     runner_dir: /opt/actions-runner
     k6_version: v0.55.0
   tasks:
