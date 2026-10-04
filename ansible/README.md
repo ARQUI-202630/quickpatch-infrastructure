@@ -26,11 +26,7 @@ python3 -m venv ~/.venvs/ansible
 
 ## Antes del primer despliegue
 
-1. En `inventory/group_vars/all/main.yml`, completar lo que dice `CONFIRMAR`:
-   - `vm_admin_user`: el usuario SSH de las VMs.
-   - `team_networks`: el rango de direcciones de la VPN.
-2. Agregar las llaves públicas del equipo en `deploy_user_pubkeys`.
-3. Crear los secretos:
+1. Poner los secretos. `inventory/group_vars/all/vault.yml` está cifrado y Git lo ignora: se copia desde un lugar seguro, o se crea desde la plantilla:
 
 ```bash
 cp inventory/group_vars/all/vault.example.yml inventory/group_vars/all/vault.yml
@@ -38,26 +34,30 @@ cp inventory/group_vars/all/vault.example.yml inventory/group_vars/all/vault.yml
 ansible-vault encrypt inventory/group_vars/all/vault.yml
 ```
 
+2. Guardar la contraseña del vault en `~/.config/quickpatch/vault-pass`, fuera del repositorio. `./ap` la usa sola si existe; si no, hay que agregar `--ask-vault-pass` a cada comando.
+
+El usuario SSH (`vm_admin_user`) y la red del equipo (`team_networks`) ya están configurados en `inventory/group_vars/all/main.yml`. El paso a paso completo, desde un computador nuevo, está en el Anexo A del Documento de Infraestructura.
+
 ## Orden recomendado
 
 Primero solo lectura, después en modo simulación y al final de verdad:
 
 ```bash
 # 1. Conexión y estado de las VMs (no cambia nada)
-ansible-playbook playbooks/diagnostico.yml -k -K
+./ap playbooks/diagnostico.yml -k -K
 
 # 2. Simular la base en una sola VM y revisar qué cambiaría
-ansible-playbook playbooks/setup-base.yml --limit vm5 --check --diff -k -K --ask-vault-pass
+./ap playbooks/setup-base.yml --limit vm5 --check --diff -k -K
 
 # 3. Aplicar en una VM, comprobar que SSH sigue funcionando, y luego en el resto
-ansible-playbook playbooks/setup-base.yml --limit vm5 -k -K --ask-vault-pass
-ansible-playbook playbooks/setup-base.yml -k -K --ask-vault-pass
+./ap playbooks/setup-base.yml --limit vm5 -k -K
+./ap playbooks/setup-base.yml -k -K
 
 # 4. Todo lo demás, en el orden de site.yml
-ansible-playbook playbooks/site.yml -k -K --ask-vault-pass
+./ap playbooks/site.yml -k -K
 ```
 
-`-k` pide la contraseña SSH y `-K` la de sudo. Cuando las llaves SSH funcionen, se dejan de usar `-k` y se puede poner `ssh_disable_password_auth: true`.
+`-k` pide la contraseña SSH y `-K` la de sudo. El acceso a las VMs es con contraseña: el equipo decidió no exigir llaves públicas (Documento de Infraestructura, sección 10.4).
 
 ## Playbooks
 
@@ -96,7 +96,7 @@ El certificado es autofirmado: el navegador muestra una advertencia la primera v
 
 - **Contenedores con red de host.** Con puertos publicados, Docker se salta las reglas de `ufw`; con red de host, el firewall de la sección 10.2 sí aplica.
 - **El firewall abre el 22 antes de activarse**, para no perder la conexión.
-- **El login por contraseña sigue activo** hasta poner `ssh_disable_password_auth: true`.
+- **SSH con contraseña, sin login de `root`.** Se decidió no exigir llaves (Documento de Infraestructura, sección 10.4). Si algún día se decide, `deploy_user_pubkeys` y `ssh_disable_password_auth` ya lo permiten.
 - **El escritorio remoto (3389) queda abierto para la VPN del equipo**, porque el laboratorio lo usa y activar `ufw` lo bloquearía.
 - **QA no puede llegar a producción:** PostgreSQL, Redis, Kafka y Garage de producción solo aceptan conexiones desde VM3 (y Garage, también desde VM4 para el respaldo).
 - **Garage con una llave por uso:** `servicios` solo accede a `evidencias` y `backups` solo a `backups-postgres`. Las llaves se definen en el vault y el playbook las importa (`tasks/garage.yml`).

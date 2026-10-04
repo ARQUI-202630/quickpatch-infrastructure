@@ -1,13 +1,13 @@
 # Variables comunes a las 7 VMs.
-# Lo que dice "CONFIRMAR" hay que revisarlo antes del primer despliegue.
 
 # --- Acceso -----------------------------------------------------------------
 vm_admin_user: estudiante         # usuario que dio el laboratorio. La clave NUNCA va en este repo (-k -K)
 ansible_user: "{{ vm_admin_user }}"
 deploy_user: quickpatch            # usuario de despliegue que crea setup-base.yml
-deploy_user_pubkeys: []            # llaves públicas del equipo (contenido de *.pub)
+deploy_user_pubkeys: []            # llaves públicas (*.pub); vacío: el equipo decidió SSH con contraseña
 
-# Desactivar el login por contraseña SOLO después de probar que las llaves funcionan.
+# Desactivar el login por contraseña solo si se decide usar llaves y después de probarlas
+# (Documento de Infraestructura, sección 10.4).
 ssh_disable_password_auth: false
 
 # Desde dónde se permite SSH y el acceso del equipo a las consolas (Kafka UI, Grafana,
