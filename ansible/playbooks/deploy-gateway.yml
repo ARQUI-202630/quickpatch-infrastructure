@@ -39,6 +39,7 @@
         -subj "/CN={{ gateway_domain }}"
         -addext "subjectAltName={{ gateway_hosts.values() | map('regex_replace', '^', 'DNS:') | join(',') }},IP:{{ ansible_host }}"
       when: cert_actual.rc != 0 or (gateway_hosts.values() | reject('in', cert_actual.stdout) | list | length > 0)
+      changed_when: true   # solo corre cuando el certificado hay que regenerarlo
       notify: Recargar gateway
 
     - name: Configuración de Nginx

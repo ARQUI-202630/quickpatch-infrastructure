@@ -10,9 +10,9 @@
     runner_dir: /opt/actions-runner
     k6_version: v0.55.0
   tasks:
-    - name: kubectl {{ k3s_version | regex_replace('\+.*','') }}
+    - name: Instalar kubectl {{ k3s_version | regex_replace('\+.*', '') }}
       ansible.builtin.get_url:
-        url: "https://dl.k8s.io/release/{{ k3s_version | regex_replace('\\+.*','') }}/bin/linux/amd64/kubectl"
+        url: "https://dl.k8s.io/release/{{ k3s_version | regex_replace('\\+.*', '') }}/bin/linux/amd64/kubectl"
         dest: /usr/local/bin/kubectl
         mode: "0755"
 
@@ -23,7 +23,7 @@
         owner: "{{ deploy_user }}"
         mode: "0700"
 
-    - name: kubeconfig de QA y de producción (apuntan a la IP de cada VM, no a 127.0.0.1)
+    - name: Kubeconfig de QA y de producción (apuntan a la IP de cada VM, no a 127.0.0.1)
       ansible.builtin.copy:
         content: "{{ lookup('file', '../.secretos/kubeconfig-' ~ item.nombre ~ '.yaml') | replace('127.0.0.1', item.ip) }}"
         dest: "/home/{{ deploy_user }}/.kube/config-{{ item.nombre }}"
@@ -34,6 +34,13 @@
         - { nombre: produccion, ip: "{{ ip.vm3 }}" }
       loop_control:
         label: "{{ item.nombre }}"
+
+    # Las pruebas de sistema (E2E, ZAP y k6) apuntan a QA por su nombre, como lo haría un usuario.
+    - name: El runner resuelve el nombre de QA
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '\s{{ gateway_hosts.qa | regex_escape }}$'
+        line: "{{ ip.vm2 }} {{ gateway_hosts.qa }}"
 
     # deploy-panel.yml publica el panel de QA en VM2 por SSH con esta llave.
     - name: Carpeta .ssh del usuario de despliegue
@@ -70,7 +77,7 @@
         key: "{{ llave_runner.content | b64decode }}"
       delegate_to: vm2
 
-    - name: k6 {{ k6_version }} para la prueba de carga en QA
+    - name: Instalar k6 para la prueba de carga en QA, versión {{ k6_version }}
       ansible.builtin.unarchive:
         src: "https://github.com/grafana/k6/releases/download/{{ k6_version }}/k6-{{ k6_version }}-linux-amd64.tar.gz"
         dest: /usr/local/bin
@@ -101,6 +108,7 @@
       args:
         chdir: "{{ runner_dir }}"
         creates: "{{ runner_dir }}/.runner"
+      become: true
       become_user: "{{ deploy_user }}"
       no_log: true
       when: vault_github_runner_token != 'CAMBIAR'

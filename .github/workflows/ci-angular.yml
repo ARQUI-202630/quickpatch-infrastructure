@@ -1,7 +1,8 @@
-# CI del panel administrativo (Angular, ADR-012): lint, pruebas y build.
+# CI del panel administrativo (Angular, ADR-012), compuerta 1 del Documento de Pruebas:
+# lint, pruebas unitarias (Jasmine y Karma), cobertura ≥ 80% y build.
 # Convención de scripts en package.json:
 #   lint     → revisión estática (ng lint)
-#   test:ci  → pruebas sin modo watch y con navegador headless
+#   test:ci  → pruebas sin modo watch y con navegador headless (el mismo script del hook pre-push)
 #   build    → build de producción (ng build)
 # Con `artefacto: true`, guarda la carpeta del build como artefacto `panel` para deploy-panel.yml.
 # Si el repo todavía no tiene proyecto Angular, avisa y termina en verde.
@@ -12,11 +13,14 @@ on:
     inputs:
       node-version:
         type: string
-        default: "22"
+        default: "20"
       artefacto:
         description: Guardar el build como artefacto para desplegarlo
         type: boolean
         default: false
+      cobertura-minima:
+        type: string
+        default: "80"
     outputs:
       hay-proyecto:
         value: ${{ jobs.ci.outputs.hay }}
@@ -26,7 +30,7 @@ permissions:
 
 jobs:
   ci:
-    name: Lint, pruebas y build
+    name: Lint, pruebas, cobertura y build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -60,9 +64,19 @@ jobs:
         if: steps.proyecto.outputs.hay == 'true'
         run: npm run lint
 
-      - name: Pruebas
+      - name: Pruebas con cobertura
         if: steps.proyecto.outputs.hay == 'true'
-        run: npm run test:ci
+        run: |
+          set -o pipefail
+          npm run test:ci -- --code-coverage | tee salida-pruebas.txt
+
+      - name: Cobertura mínima
+        if: steps.proyecto.outputs.hay == 'true'
+        uses: ARQUI-202630/quickpatch-infrastructure/.github/actions/cobertura@main
+        with:
+          formato: texto
+          archivos: salida-pruebas.txt
+          minimo: ${{ inputs.cobertura-minima }}
 
       - name: Build de producción
         if: steps.proyecto.outputs.hay == 'true'

@@ -1,4 +1,5 @@
-# CI de la aplicación móvil (Flutter, ADR-012): formato, análisis y pruebas.
+# CI de la aplicación móvil (Flutter, ADR-012), compuerta 1 del Documento de Pruebas:
+# formato, análisis estático, pruebas (flutter test) y cobertura ≥ 80%.
 # Con `apk: true` también compila el APK de release y lo guarda como artefacto `apk`.
 # La app no se despliega en las VMs: se distribuye el APK.
 # Si el repo todavía no tiene proyecto Flutter, avisa y termina en verde.
@@ -14,13 +15,16 @@ on:
         description: Compilar el APK de release
         type: boolean
         default: false
+      cobertura-minima:
+        type: string
+        default: "80"
 
 permissions:
   contents: read
 
 jobs:
   ci:
-    name: Análisis y pruebas
+    name: Análisis, pruebas y cobertura
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -56,9 +60,17 @@ jobs:
         if: steps.proyecto.outputs.hay == 'true'
         run: flutter analyze
 
-      - name: Pruebas
+      - name: Pruebas con cobertura
         if: steps.proyecto.outputs.hay == 'true'
-        run: flutter test
+        run: flutter test --coverage
+
+      - name: Cobertura mínima
+        if: steps.proyecto.outputs.hay == 'true'
+        uses: ARQUI-202630/quickpatch-infrastructure/.github/actions/cobertura@main
+        with:
+          formato: lcov
+          archivos: coverage/lcov.info
+          minimo: ${{ inputs.cobertura-minima }}
 
       - name: APK de release
         if: steps.proyecto.outputs.hay == 'true' && inputs.apk

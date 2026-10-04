@@ -1,7 +1,10 @@
-# CI de los servicios ASP.NET Core (ADR-012): formato, compilación y pruebas.
+# CI de los servicios ASP.NET Core (ADR-012), compuerta 1 del Documento de Pruebas:
+# formato, compilación, pruebas unitarias, de integración (Testcontainers) y cobertura ≥ 80%.
 # Lo llaman los repos de servicio con `uses:` (plantilla en plantillas/ci/servicio-dotnet.yml).
-# Convención: una solución (.sln o .slnx) en la raíz del repo; las pruebas de integración
-# llevan [Trait("Category", "Integration")] y usan Testcontainers.
+# Convenciones (Documento de Pruebas, sección 2):
+#   - una solución (.sln o .slnx) en la raíz del repo;
+#   - proyectos de pruebas unitarias en tests/unit/ y de integración en tests/integration/;
+#   - los proyectos de pruebas referencian coverlet.collector (viene en la plantilla de xUnit).
 # Si el repo todavía no tiene proyecto .NET, avisa y termina en verde.
 name: CI .NET
 
@@ -10,20 +13,23 @@ on:
     inputs:
       dotnet-version:
         type: string
-        default: "10.0.x"
+        default: "8.0.x"
       integracion:
         description: Correr también las pruebas de integración (Testcontainers)
         type: boolean
         default: false
+      cobertura-minima:
+        type: string
+        default: "80"
 
 permissions:
   contents: read
 
 jobs:
   ci:
-    name: Lint y pruebas
+    name: Lint, pruebas y cobertura
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,13 +62,39 @@ jobs:
         if: steps.proyecto.outputs.hay == 'true'
         run: dotnet build --no-restore -c Release
 
-      - name: Pruebas unitarias
+      - name: Pruebas unitarias (tests/unit)
         if: steps.proyecto.outputs.hay == 'true'
-        run: dotnet test --no-build -c Release --filter "Category!=Integration" --logger trx --results-directory resultados
+        run: |
+          proyectos=$(find tests/unit -name '*.csproj' 2>/dev/null || true)
+          if [ -z "$proyectos" ]; then
+            echo "::error::No hay proyectos de pruebas unitarias en tests/unit/ (Documento de Pruebas, sección 2)."
+            exit 1
+          fi
+          for p in $proyectos; do
+            dotnet test "$p" --no-build -c Release --collect:"XPlat Code Coverage" \
+              --logger trx --results-directory resultados
+          done
 
-      - name: Pruebas de integración (Testcontainers)
+      - name: Pruebas de integración (tests/integration, Testcontainers)
         if: steps.proyecto.outputs.hay == 'true' && inputs.integracion
-        run: dotnet test --no-build -c Release --filter "Category=Integration" --logger trx --results-directory resultados
+        run: |
+          proyectos=$(find tests/integration -name '*.csproj' 2>/dev/null || true)
+          if [ -z "$proyectos" ]; then
+            echo "::warning::No hay proyectos de pruebas de integración en tests/integration/."
+            exit 0
+          fi
+          for p in $proyectos; do
+            dotnet test "$p" --no-build -c Release --collect:"XPlat Code Coverage" \
+              --logger trx --results-directory resultados
+          done
+
+      - name: Cobertura mínima
+        if: steps.proyecto.outputs.hay == 'true'
+        uses: ARQUI-202630/quickpatch-infrastructure/.github/actions/cobertura@main
+        with:
+          formato: cobertura
+          archivos: resultados/**/coverage.cobertura.xml
+          minimo: ${{ inputs.cobertura-minima }}
 
       - name: Guardar resultados de las pruebas
         if: always() && steps.proyecto.outputs.hay == 'true'

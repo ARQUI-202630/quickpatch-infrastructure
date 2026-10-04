@@ -18,7 +18,7 @@
 - name: Docker activo al arrancar
   ansible.builtin.service: { name: docker, state: started, enabled: true }
 
-- name: firewalld activo
+- name: Firewalld activo
   ansible.builtin.service: { name: firewalld, state: started, enabled: true }
 
 # Zona propia: lo que no está aquí se rechaza. El 22 queda abierto antes de pasar la interfaz a la zona.
