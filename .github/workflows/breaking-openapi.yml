@@ -1,0 +1,67 @@
+name: OpenAPI Breaking Changes
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  breaking-openapi:
+    name: breaking-openapi
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Instalar oasdiff
+        run: |
+          go install github.com/oasdiff/oasdiff@v1.30.0
+
+      - name: Comparar OpenAPI con rama base
+        env:
+          BASE: ${{ github.base_ref }}
+        shell: bash
+        run: |
+          git fetch origin "$BASE"
+
+          deleted=$(git diff --name-only --diff-filter=D \
+            "origin/$BASE...HEAD" -- openapi/)
+
+          if [ -n "$deleted" ]; then
+            echo "::error::Se eliminaron contratos OpenAPI:"
+            echo "$deleted"
+            exit 1
+          fi
+
+          mapfile -t changed < <(
+            git diff --name-only --diff-filter=ACMRT \
+            "origin/$BASE...HEAD" -- openapi/
+          )
+
+          for f in "${changed[@]}"; do
+            [ -f "$f" ] || continue
+
+            if git cat-file -e "origin/$BASE:$f" 2>/dev/null; then
+              tmp=$(mktemp --suffix=.yaml)
+
+              git show "origin/$BASE:$f" > "$tmp"
+
+              echo "Comparando $f"
+
+              oasdiff breaking \
+                --fail-on ERR \
+                "$tmp" \
+                "$f"
+
+              rm -f "$tmp"
+            else
+              echo "Contrato nuevo: $f"
+            fi
+          done

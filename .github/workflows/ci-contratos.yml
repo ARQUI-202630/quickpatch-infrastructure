@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.contratos.outputs.openapi != '0' || steps.contratos.outputs.eventos != '0'
         with:
-          node-version: "20"
+          node-version: "24.21.0"
 
       - name: Spectral sobre openapi/ (CTR-001 a CTR-003)
         if: steps.contratos.outputs.openapi != '0'

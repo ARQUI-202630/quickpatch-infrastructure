@@ -12,7 +12,7 @@ on:
     inputs:
       java-version:
         type: string
-        default: "17"
+        default: "25"
       integracion:
         description: Correr también las pruebas de integración (Testcontainers)
         type: boolean
