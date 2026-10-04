@@ -44,6 +44,16 @@
     state: enabled
   loop: "{{ ssh_allowed_from }}"
 
+# Con target DROP, firewalld también descarta el ping. En Ubuntu, ufw lo acepta por defecto;
+# aquí se permite desde la red del laboratorio para diagnosticar conectividad entre VMs.
+- name: Permitir ping desde la red del laboratorio
+  ansible.posix.firewalld:
+    zone: quickpatch
+    rich_rule: rule family="ipv4" source address="{{ item }}" icmp-type name="echo-request" accept
+    permanent: true
+    state: enabled
+  loop: "{{ lab_networks }}"
+
 - name: Reglas de la VM
   ansible.posix.firewalld:
     zone: quickpatch
