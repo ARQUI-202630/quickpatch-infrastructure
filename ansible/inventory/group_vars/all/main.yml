@@ -11,7 +11,7 @@ deploy_user_pubkeys: []            # llaves públicas del equipo (contenido de *
 ssh_disable_password_auth: false
 
 # Desde dónde se permite SSH y el acceso del equipo a las consolas (Kafka UI, Grafana,
-# Prometheus, MinIO, escritorio remoto). La VPN de la Javeriana entrega direcciones 10.101.x.x
+# Prometheus, escritorio remoto). La VPN de la Javeriana entrega direcciones 10.101.x.x
 # (observado el 2026-10-03), dentro de 10.0.0.0/8.
 ssh_allowed_from: [any]
 team_networks: [10.0.0.0/8]
@@ -48,8 +48,8 @@ images:
   redis: redis:7.4-alpine
   kafka: apache/kafka:3.8.1
   kafka_ui: provectuslabs/kafka-ui:v0.7.2
-  minio: minio/minio:RELEASE.2024-12-18T13-15-44Z
-  minio_client: minio/mc:RELEASE.2024-11-21T17-21-54Z
+  garage: dxflrs/garage:v2.4.1
+  aws_cli: amazon/aws-cli:2.37.9
   prometheus: prom/prometheus:v2.55.1
   loki: grafana/loki:3.3.2
   grafana: grafana/grafana:11.4.0
@@ -58,10 +58,10 @@ images:
   nginx: nginx:1.27-alpine
 k3s_version: v1.31.4+k3s1
 
-# Almacenamiento de objetos (evidencias y respaldos). MinIO dejó de distribuir imágenes y
-# binarios en 2025 (dl.min.io responde 410). PENDIENTE de decidir el reemplazo; mientras tanto,
-# apagado: no se levanta el storage ni el respaldo a storage.
-object_storage_enabled: false
+# Almacenamiento de objetos (evidencias y respaldos): Garage, compatible con S3 (ADR-016).
+# Reemplaza a MinIO, que dejó de distribuir imágenes y binarios en 2025. API S3 en el puerto
+# 9000 de VM7 (producción) y de VM2 (QA); RPC y administración solo en localhost.
+garage_region: garage
 
 # --- k3s (sección 5.2: fuera del rango del laboratorio, 10.43.0.0/16) ---------
 k3s_service_cidr: 10.44.0.0/16
