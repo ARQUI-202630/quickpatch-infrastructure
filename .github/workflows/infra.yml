@@ -1,0 +1,63 @@
+# CI de este repo (Documento de Pruebas, sección 7.10): workflows y plantillas (actionlint),
+# Ansible (sintaxis y ansible-lint, INF-001) y secretos en el historial de Git (gitleaks, INF-009).
+# No toca las VMs: los playbooks se aplican a mano con ansible/ap (ver ansible/README.md).
+name: Revisión de infraestructura
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  workflows:
+    name: Workflows y plantillas (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color \
+            .github/workflows/*.yml plantillas/ci/*.yml
+
+  ansible:
+    name: Ansible (sintaxis y ansible-lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Instalar Ansible y colecciones
+        run: |
+          pip install "ansible-core>=2.18,<2.19"
+          ansible-galaxy collection install -r requirements.yml
+      - name: Revisar sintaxis de todos los playbooks
+        run: |
+          for p in playbooks/*.yml; do
+            echo "== $p"
+            ansible-playbook --syntax-check "$p"
+          done
+      - name: ansible-lint, perfil production (INF-001)
+        run: |
+          pip install "ansible-lint>=25,<26"
+          ansible-lint playbooks/ tasks/
+
+  secretos:
+    name: Secretos en el historial (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (INF-009)
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --no-banner --redact

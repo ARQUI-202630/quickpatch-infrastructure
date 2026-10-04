@@ -1,0 +1,10 @@
+# Configuración de ansible-lint (Documento de Pruebas, INF-001).
+profile: production
+skip_list:
+  # Las plantillas viven en ansible/templates/, compartidas por todos los playbooks de
+  # ansible/playbooks/; por eso se referencian como ../templates/.
+  - no-relative-paths
+exclude_paths:
+  - collections/
+  - .secretos/
+  - inventory/group_vars/all/vault.yml

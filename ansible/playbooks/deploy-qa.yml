@@ -23,7 +23,7 @@
         - { path: "{{ dir }}", mode: "0755" }
         - { path: "{{ dir }}/init", mode: "0700", owner: "999" }   # usuario postgres del contenedor
         - { path: "{{ dir }}/certs", mode: "0750" }
-        - { path: "{{ dir }}/panel", mode: "0755" }
+        - { path: "{{ dir }}/panel", mode: "0755", owner: "{{ deploy_user }}" }   # la escribe el runner (deploy-panel.yml)
 
     - name: Certificado autofirmado de QA
       ansible.builtin.command: >
@@ -38,6 +38,7 @@
       ansible.builtin.copy:
         dest: "{{ dir }}/panel/index.html"
         mode: "0644"
+        owner: "{{ deploy_user }}"
         force: false
         content: "<!doctype html><title>QUICKPATCH QA</title><p>Ambiente de QA: pendiente del primer build de Angular.</p>\n"
 

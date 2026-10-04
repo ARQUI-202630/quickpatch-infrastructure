@@ -1,0 +1,17 @@
+# CI de quickpatch-contracts. Copiar en el repo como .github/workflows/ci.yml.
+# Valida los contratos en cada PR y push, y la forma de los tags de versión (vMAJOR.MINOR.PATCH).
+name: CI
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop, main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  contratos:
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/ci-contratos.yml@main

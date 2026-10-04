@@ -11,15 +11,17 @@
         path: "{{ item.path }}"
         state: directory
         mode: "{{ item.mode }}"
+        owner: "{{ item.owner | default('root') }}"
       loop:
         - { path: "{{ dir }}", mode: "0755" }
         - { path: "{{ dir }}/certs", mode: "0750" }
-        - { path: "{{ dir }}/panel", mode: "0755" }
+        - { path: "{{ dir }}/panel", mode: "0755", owner: "{{ deploy_user }}" }   # la escribe el runner (deploy-panel.yml)
 
     - name: Página provisional del panel (hasta el primer build de Angular)
       ansible.builtin.copy:
         dest: "{{ dir }}/panel/index.html"
         mode: "0644"
+        owner: "{{ deploy_user }}"
         force: false
         content: "<!doctype html><title>QUICKPATCH</title><p>Panel administrativo: pendiente del primer build de Angular.</p>\n"
 
@@ -37,6 +39,7 @@
         -subj "/CN={{ gateway_domain }}"
         -addext "subjectAltName={{ gateway_hosts.values() | map('regex_replace', '^', 'DNS:') | join(',') }},IP:{{ ansible_host }}"
       when: cert_actual.rc != 0 or (gateway_hosts.values() | reject('in', cert_actual.stdout) | list | length > 0)
+      changed_when: true   # solo corre cuando el certificado hay que regenerarlo
       notify: Recargar gateway
 
     - name: Configuración de Nginx

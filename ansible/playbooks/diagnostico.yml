@@ -10,7 +10,7 @@
           {{ ansible_distribution }} {{ ansible_distribution_version }},
           {{ ansible_processor_vcpus }} vCPU,
           {{ (ansible_memtotal_mb / 1024) | round(1) }} GiB RAM,
-          disco libre en /: {{ ((ansible_mounts | selectattr('mount','equalto','/') | first).size_available / 1024**3) | round(1) }} GiB
+          disco libre en /: {{ ((ansible_mounts | selectattr('mount', 'equalto', '/') | first).size_available / 1024**3) | round(1) }} GiB
 
     - name: ¿Docker instalado?
       ansible.builtin.command: docker --version

@@ -1,0 +1,105 @@
+# CI de los servicios ASP.NET Core (ADR-012), compuerta 1 del Documento de Pruebas:
+# formato, compilación, pruebas unitarias, de integración (Testcontainers) y cobertura ≥ 80%.
+# Lo llaman los repos de servicio con `uses:` (plantilla en plantillas/ci/servicio-dotnet.yml).
+# Convenciones (Documento de Pruebas, sección 2):
+#   - una solución (.sln o .slnx) en la raíz del repo;
+#   - proyectos de pruebas unitarias en tests/unit/ y de integración en tests/integration/;
+#   - los proyectos de pruebas referencian coverlet.collector (viene en la plantilla de xUnit).
+# Si el repo todavía no tiene proyecto .NET, avisa y termina en verde.
+name: CI .NET
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        type: string
+        default: "8.0.x"
+      integracion:
+        description: Correr también las pruebas de integración (Testcontainers)
+        type: boolean
+        default: false
+      cobertura-minima:
+        type: string
+        default: "80"
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint, pruebas y cobertura
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar proyecto .NET
+        id: proyecto
+        run: |
+          if find . -path ./contracts -prune -o \( -name '*.sln' -o -name '*.slnx' -o -name '*.csproj' \) -print | grep -q .; then
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay proyecto .NET: se omiten lint y pruebas."
+          fi
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.proyecto.outputs.hay == 'true'
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restaurar dependencias
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet restore
+
+      - name: Formato (lint)
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Compilar
+        if: steps.proyecto.outputs.hay == 'true'
+        run: dotnet build --no-restore -c Release
+
+      - name: Pruebas unitarias (tests/unit)
+        if: steps.proyecto.outputs.hay == 'true'
+        run: |
+          proyectos=$(find tests/unit -name '*.csproj' 2>/dev/null || true)
+          if [ -z "$proyectos" ]; then
+            echo "::error::No hay proyectos de pruebas unitarias en tests/unit/ (Documento de Pruebas, sección 2)."
+            exit 1
+          fi
+          for p in $proyectos; do
+            dotnet test "$p" --no-build -c Release --collect:"XPlat Code Coverage" \
+              --logger trx --results-directory resultados
+          done
+
+      - name: Pruebas de integración (tests/integration, Testcontainers)
+        if: steps.proyecto.outputs.hay == 'true' && inputs.integracion
+        run: |
+          proyectos=$(find tests/integration -name '*.csproj' 2>/dev/null || true)
+          if [ -z "$proyectos" ]; then
+            echo "::warning::No hay proyectos de pruebas de integración en tests/integration/."
+            exit 0
+          fi
+          for p in $proyectos; do
+            dotnet test "$p" --no-build -c Release --collect:"XPlat Code Coverage" \
+              --logger trx --results-directory resultados
+          done
+
+      - name: Cobertura mínima
+        if: steps.proyecto.outputs.hay == 'true'
+        uses: ARQUI-202630/quickpatch-infrastructure/.github/actions/cobertura@main
+        with:
+          formato: cobertura
+          archivos: resultados/**/coverage.cobertura.xml
+          minimo: ${{ inputs.cobertura-minima }}
+
+      - name: Guardar resultados de las pruebas
+        if: always() && steps.proyecto.outputs.hay == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-dotnet
+          path: resultados
+          if-no-files-found: ignore

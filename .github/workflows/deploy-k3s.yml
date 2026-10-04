@@ -1,0 +1,80 @@
+# Despliega una imagen en el k3s de QA (VM2) o de producción (VM3).
+# Corre en el runner self-hosted de VM1: es el único que llega a la red del laboratorio
+# (Documento de Infraestructura, sección 6.3). El runner ya tiene los dos kubeconfig,
+# que deja deploy-runner.yml en ~quickpatch/.kube.
+#
+# SEGURIDAD: llamarlo solo desde eventos `push` (nunca `pull_request`): los repos son
+# públicos y un PR desde un fork ejecutaría código ajeno dentro de la red del laboratorio.
+#
+# El Deployment debe existir antes del primer despliegue (manifiestos en k8s/ de este repo).
+name: Despliegue en k3s
+
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: qa o produccion
+        type: string
+        required: true
+      imagen:
+        description: Referencia completa de la imagen (salida de imagen.yml)
+        type: string
+        required: true
+      servicio:
+        description: Nombre del Deployment. Por defecto, el nombre del repo sin "quickpatch-"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  desplegar:
+    name: Desplegar en ${{ inputs.ambiente }}
+    runs-on: [self-hosted, vm1, red-laboratorio]
+    timeout-minutes: 15
+    # En GitHub, el ambiente "produccion" puede exigir aprobación de un revisor antes de correr.
+    environment: ${{ inputs.ambiente }}
+    concurrency:
+      group: despliegue-${{ inputs.ambiente }}-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      AMBIENTE: ${{ inputs.ambiente }}
+      IMAGEN: ${{ inputs.imagen }}
+      SERVICIO: ${{ inputs.servicio }}
+      NS: quickpatch
+    steps:
+      - name: Validar entradas
+        run: |
+          case "$AMBIENTE" in
+            qa|produccion) ;;
+            *) echo "::error::Ambiente desconocido: '$AMBIENTE' (usar qa o produccion)."; exit 1 ;;
+          esac
+          repo="${GITHUB_REPOSITORY#*/}"
+          svc="${SERVICIO:-${repo#quickpatch-}}"
+          echo "SVC=$svc" >> "$GITHUB_ENV"
+          echo "KUBECONFIG=$HOME/.kube/config-$AMBIENTE" >> "$GITHUB_ENV"
+
+      - name: Verificar que el Deployment existe
+        run: |
+          if ! kubectl get deployment "$SVC" -n "$NS" > /dev/null; then
+            echo "::error::No existe el Deployment '$SVC' en $AMBIENTE. Falta su manifiesto en quickpatch-infrastructure (k8s/)."
+            exit 1
+          fi
+
+      - name: Actualizar la imagen
+        run: |
+          kubectl set image deployment/"$SVC" -n "$NS" "*=$IMAGEN"
+          kubectl annotate deployment/"$SVC" -n "$NS" --overwrite \
+            kubernetes.io/change-cause="$IMAGEN ($GITHUB_REPOSITORY@${GITHUB_SHA::12})"
+
+      - name: Esperar el rolling update
+        id: rollout
+        run: kubectl rollout status deployment/"$SVC" -n "$NS" --timeout=180s
+
+      - name: Revertir si el rolling update falló
+        if: failure() && steps.rollout.outcome == 'failure'
+        run: |
+          echo "::error::El rolling update de '$SVC' no terminó: se vuelve a la versión anterior."
+          kubectl rollout undo deployment/"$SVC" -n "$NS"
+          kubectl rollout status deployment/"$SVC" -n "$NS" --timeout=180s
