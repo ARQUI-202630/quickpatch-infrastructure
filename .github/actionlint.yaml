@@ -1,0 +1,5 @@
+# Etiquetas del runner self-hosted de VM1 (ansible/playbooks/deploy-runner.yml).
+self-hosted-runner:
+  labels:
+    - vm1
+    - red-laboratorio

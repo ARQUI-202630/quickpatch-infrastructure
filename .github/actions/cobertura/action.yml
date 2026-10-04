@@ -1,0 +1,94 @@
+# Verifica la cobertura de líneas contra el mínimo del Documento de Pruebas (compuerta 1: ≥ 80%).
+# Formatos:
+#   cobertura → XML de coverlet (.NET). Une las líneas de todos los reportes por archivo y número.
+#   jacoco    → XML de JaCoCo (Java). Suma el contador LINE de cada reporte.
+#   lcov      → lcov.info (Flutter). Une las líneas por archivo y número.
+#   texto     → salida de Karma (Angular) con la línea "Lines : NN.NN%".
+name: Cobertura mínima
+description: Falla si la cobertura de líneas está por debajo del mínimo
+
+inputs:
+  formato:
+    description: cobertura, jacoco, lcov o texto
+    required: true
+  archivos:
+    description: Uno o varios patrones (glob) de los reportes separados por espacio, relativos a la raíz del repo
+    required: true
+  minimo:
+    description: Porcentaje mínimo de líneas cubiertas
+    default: "80"
+
+outputs:
+  porcentaje:
+    description: Cobertura de líneas medida
+    value: ${{ steps.medir.outputs.porcentaje }}
+
+runs:
+  using: composite
+  steps:
+    - name: Medir cobertura
+      id: medir
+      shell: bash
+      env:
+        FORMATO: ${{ inputs.formato }}
+        ARCHIVOS: ${{ inputs.archivos }}
+        MINIMO: ${{ inputs.minimo }}
+      run: |
+        python3 - <<'PY'
+        import glob, os, re, sys
+        import xml.etree.ElementTree as ET
+
+        formato, patron, minimo = os.environ["FORMATO"], os.environ["ARCHIVOS"], float(os.environ["MINIMO"])
+        archivos = sorted({a for p in patron.split() for a in glob.glob(p, recursive=True)})
+        if not archivos:
+            print(f"::error::No se encontró ningún reporte de cobertura ({patron}). Ver las convenciones en CI-CD.md de quickpatch-infrastructure.")
+            sys.exit(1)
+
+        cubiertas = totales = 0
+        if formato in ("cobertura", "lcov"):
+            lineas = {}
+            for a in archivos:
+                if formato == "cobertura":
+                    for clase in ET.parse(a).iter("class"):
+                        f = clase.get("filename")
+                        for l in clase.iter("line"):
+                            k = (f, l.get("number"))
+                            lineas[k] = lineas.get(k, False) or int(l.get("hits", "0")) > 0
+                else:
+                    f = None
+                    for linea in open(a, encoding="utf-8"):
+                        if linea.startswith("SF:"):
+                            f = linea[3:].strip()
+                        elif linea.startswith("DA:"):
+                            n, hits = linea[3:].split(",")[:2]
+                            k = (f, n)
+                            lineas[k] = lineas.get(k, False) or int(hits) > 0
+            totales, cubiertas = len(lineas), sum(lineas.values())
+        elif formato == "jacoco":
+            for a in archivos:
+                for c in ET.parse(a).getroot().findall("counter"):
+                    if c.get("type") == "LINE":
+                        cubiertas += int(c.get("covered"))
+                        totales += int(c.get("covered")) + int(c.get("missed"))
+        elif formato == "texto":
+            m = None
+            for a in archivos:
+                m = re.search(r"Lines\s*:\s*([\d.]+)%", open(a, encoding="utf-8", errors="ignore").read()) or m
+            if not m:
+                print("::error::La salida de las pruebas no trae el resumen 'Lines : NN%'. ¿Se corrió con --code-coverage?")
+                sys.exit(1)
+            cubiertas, totales = float(m.group(1)), 100.0
+        else:
+            print(f"::error::Formato de cobertura desconocido: {formato}")
+            sys.exit(1)
+
+        porcentaje = round(100.0 * cubiertas / totales, 2) if totales else 0.0
+        with open(os.environ["GITHUB_OUTPUT"], "a") as o:
+            o.write(f"porcentaje={porcentaje}\n")
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as r:
+            r.write(f"### Cobertura de líneas: {porcentaje}% (mínimo {minimo:g}%)\n")
+        if porcentaje < minimo:
+            print(f"::error::Cobertura de líneas {porcentaje}% por debajo del mínimo de {minimo:g}% (Documento de Pruebas, compuerta 1).")
+            sys.exit(1)
+        print(f"Cobertura de líneas: {porcentaje}% (mínimo {minimo:g}%)")
+        PY

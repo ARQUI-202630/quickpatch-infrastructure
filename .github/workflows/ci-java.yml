@@ -1,0 +1,81 @@
+# CI de Matching (Java + Spring Boot, ADR-012), compuerta 1 del Documento de Pruebas:
+# compilación, pruebas unitarias (JUnit 5), de integración (Testcontainers con PostGIS) y cobertura ≥ 80%.
+# Acepta Gradle (el que usa el Documento de Pruebas) o Maven; usa el wrapper si existe.
+#   Gradle: `test` para unitarias, `integrationTest` para integración, `jacocoTestReport` para cobertura.
+#   Maven:  `test` para unitarias, `verify` con Failsafe (*IT.java) para integración; JaCoCo en verify.
+# El proyecto debe tener JaCoCo configurado con reporte XML.
+# Si el repo todavía no tiene proyecto Java, avisa y termina en verde.
+name: CI Java
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        type: string
+        default: "17"
+      integracion:
+        description: Correr también las pruebas de integración (Testcontainers)
+        type: boolean
+        default: false
+      cobertura-minima:
+        type: string
+        default: "80"
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Compilación, pruebas y cobertura
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar proyecto Java
+        id: proyecto
+        run: |
+          if [ -f build.gradle ] || [ -f build.gradle.kts ]; then
+            herramienta=gradle
+            if [ -x gradlew ]; then cmd=./gradlew; else cmd=gradle; fi
+          elif [ -f pom.xml ]; then
+            herramienta=maven
+            if [ -x mvnw ]; then cmd=./mvnw; else cmd=mvn; fi
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay proyecto Java (build.gradle o pom.xml): se omiten las pruebas."
+            exit 0
+          fi
+          { echo "hay=true"; echo "herramienta=$herramienta"; echo "cmd=$cmd"; } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        if: steps.proyecto.outputs.hay == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: ${{ steps.proyecto.outputs.herramienta }}
+
+      - name: Pruebas
+        if: steps.proyecto.outputs.hay == 'true'
+        env:
+          CMD: ${{ steps.proyecto.outputs.cmd }}
+          HERRAMIENTA: ${{ steps.proyecto.outputs.herramienta }}
+          INTEGRACION: ${{ inputs.integracion }}
+        run: |
+          if [ "$HERRAMIENTA" = gradle ]; then
+            tareas=(test)
+            [ "$INTEGRACION" = true ] && tareas+=(integrationTest)
+            "$CMD" "${tareas[@]}" jacocoTestReport
+          else
+            if [ "$INTEGRACION" = true ]; then "$CMD" -B -ntp verify; else "$CMD" -B -ntp test jacoco:report; fi
+          fi
+
+      - name: Cobertura mínima
+        if: steps.proyecto.outputs.hay == 'true'
+        uses: ARQUI-202630/quickpatch-infrastructure/.github/actions/cobertura@main
+        with:
+          formato: jacoco
+          archivos: build/reports/jacoco/**/*.xml target/site/jacoco/jacoco.xml
+          minimo: ${{ inputs.cobertura-minima }}

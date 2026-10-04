@@ -1,0 +1,25 @@
+# CI/CD de quickpatch-mobile (Flutter). Copiar en el repo como .github/workflows/ci-cd.yml.
+# La lógica vive en quickpatch-infrastructure; aquí solo se decide qué corre en cada rama:
+#   PR a develop, push develop → formato, análisis y pruebas
+#   push release/* y main      → además, APK de release como artefacto del workflow
+# La app no se despliega en las VMs: el APK se descarga desde la pestaña Actions.
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop, "release/**", main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/ci-flutter.yml@main
+    with:
+      apk: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/release/') || github.ref == 'refs/heads/main') }}

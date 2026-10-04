@@ -1,0 +1,63 @@
+# CI de quickpatch-contracts (Documento de Pruebas, sección 7.9):
+#   CTR-001 a CTR-003 → Spectral sobre openapi/ (reglas en .spectral.yaml del repo; si no
+#                       existe, se usan las reglas base de OpenAPI, spectral:oas)
+#   CTR-004 y CTR-005 → AJV compila cada esquema de events/
+#   CTR-006           → los tags deben tener la forma vMAJOR.MINOR.PATCH
+# Si todavía no hay contratos, avisa y termina en verde.
+name: CI contratos
+
+on:
+  workflow_call:
+    inputs:
+      json-schema:
+        description: Versión de JSON Schema de los eventos (draft7, draft2019 o draft2020)
+        type: string
+        default: draft7
+
+permissions:
+  contents: read
+
+jobs:
+  contratos:
+    name: OpenAPI, esquemas de eventos y versión
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag con versión semántica (CTR-006)
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::El tag '$TAG' no sigue vMAJOR.MINOR.PATCH (Documento de Pruebas, CTR-006)."
+            exit 1
+          fi
+
+      - name: Buscar contratos
+        id: contratos
+        run: |
+          openapi=$(find openapi -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) 2>/dev/null | wc -l)
+          eventos=$(find events -type f -name '*.json' 2>/dev/null | wc -l)
+          { echo "openapi=$openapi"; echo "eventos=$eventos"; } >> "$GITHUB_OUTPUT"
+          [ "$openapi" -eq 0 ] && echo "::notice::Todavía no hay contratos OpenAPI en openapi/."
+          [ "$eventos" -eq 0 ] && echo "::notice::Todavía no hay esquemas de eventos en events/."
+          exit 0
+
+      - uses: actions/setup-node@v4
+        if: steps.contratos.outputs.openapi != '0' || steps.contratos.outputs.eventos != '0'
+        with:
+          node-version: "20"
+
+      - name: Spectral sobre openapi/ (CTR-001 a CTR-003)
+        if: steps.contratos.outputs.openapi != '0'
+        run: |
+          [ -f .spectral.yaml ] || echo 'extends: ["spectral:oas"]' > .spectral.yaml
+          npx -y @stoplight/spectral-cli@6 lint "openapi/**/*.{yaml,yml,json}" --fail-severity error
+
+      - name: AJV sobre events/ (CTR-004 y CTR-005)
+        if: steps.contratos.outputs.eventos != '0'
+        env:
+          SPEC: ${{ inputs.json-schema }}
+        run: npx -y -p ajv-cli@5 -p ajv-formats@3 ajv compile --spec="$SPEC" -c ajv-formats --strict=false -s "events/**/*.json"

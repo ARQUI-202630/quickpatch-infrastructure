@@ -1,0 +1,102 @@
+# Construye la imagen Docker del servicio y la publica en GitHub Container Registry.
+#
+# Etiqueta por contenido: t-<hash del árbol de archivos>. Un merge de release/* a main sin
+# otros cambios tiene el mismo árbol que la rama release, así que producción despliega
+# exactamente la imagen que se probó en QA, sin volver a construirla (ADR-015).
+# Si main trae algo que no pasó por release/*, se construye de nuevo y se avisa.
+#
+# El caller debe dar `packages: write` al job que llama este workflow.
+# Si el repo todavía no tiene Dockerfile, no publica nada y `imagen` queda vacía.
+name: Imagen
+
+on:
+  workflow_call:
+    outputs:
+      imagen:
+        description: Referencia completa de la imagen publicada (vacía si no hay Dockerfile)
+        value: ${{ jobs.imagen.outputs.imagen }}
+
+permissions:
+  contents: read
+
+jobs:
+  imagen:
+    name: Construir y publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      imagen: ${{ steps.publicada.outputs.imagen }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Buscar Dockerfile
+        id: dockerfile
+        run: |
+          if [ -f Dockerfile ]; then
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay Dockerfile en la raíz: no se publica imagen."
+          fi
+
+      - name: Nombre y etiqueta
+        id: nombre
+        if: steps.dockerfile.outputs.hay == 'true'
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"   # GHCR exige minúsculas
+          {
+            echo "imagen=ghcr.io/${repo}"
+            echo "etiqueta=t-$(git rev-parse --short=12 'HEAD^{tree}')"
+            echo "sha=sha-$(git rev-parse --short=12 HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        if: steps.dockerfile.outputs.hay == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ¿Ya existe una imagen con este contenido?
+        id: existe
+        if: steps.dockerfile.outputs.hay == 'true'
+        env:
+          REF: ${{ steps.nombre.outputs.imagen }}:${{ steps.nombre.outputs.etiqueta }}
+        run: |
+          if docker manifest inspect "$REF" > /dev/null 2>&1; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$REF ya existe: se reutiliza sin construir."
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            if [ "$GITHUB_REF" = refs/heads/main ]; then
+              echo "::warning::Este contenido no pasó por QA: main tiene cambios que no venían de release/*. Se construye una imagen nueva."
+            fi
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.dockerfile.outputs.hay == 'true' && steps.existe.outputs.existe == 'false'
+
+      - uses: docker/build-push-action@v6
+        if: steps.dockerfile.outputs.hay == 'true' && steps.existe.outputs.existe == 'false'
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.nombre.outputs.imagen }}:${{ steps.nombre.outputs.etiqueta }}
+            ${{ steps.nombre.outputs.imagen }}:${{ steps.nombre.outputs.sha }}
+          # Enlaza el paquete con el repo: hereda su visibilidad y sus permisos.
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Imagen publicada
+        id: publicada
+        if: steps.dockerfile.outputs.hay == 'true'
+        env:
+          REF: ${{ steps.nombre.outputs.imagen }}:${{ steps.nombre.outputs.etiqueta }}
+        run: echo "imagen=$REF" >> "$GITHUB_OUTPUT"
