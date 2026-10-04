@@ -89,7 +89,7 @@ Las plantillas llaman los workflows en `@main` de este repo: este repo tiene que
    - Organización → Settings → Actions → General → "Fork pull request workflows": exigir aprobación para todos los colaboradores externos.
    - En Settings → Actions → Runner groups, el grupo del runner debe tener activado "Allow public repositories" para que los repos públicos lo usen. Si el plan de la organización lo permite, limitar además "Workflow access" a `deploy-k3s.yml` y `deploy-panel.yml` de este repo; hay que confirmarlo en la configuración, porque algunas de estas opciones dependen del plan de GitHub.
 3. **Aprobación para producción:** en cada repo, Settings → Environments → `produccion` → Required reviewers. El ambiente se crea solo la primera vez que corre un despliegue.
-4. **Manifiestos de k3s:** `deploy-k3s.yml` actualiza un Deployment que ya existe; no lo crea. Los manifiestos de cada servicio todavía no están escritos (`k8s/`).
+4. **Manifiestos de k3s:** el workflow `deploy-k3s.yml` (distinto del playbook del mismo nombre) actualiza un Deployment que ya existe; no lo crea. Los manifiestos irán en `k8s/` de este repo, porque se aplican en los dos k3s (QA en VM2 y producción en VM3); las carpetas `vm1-gateway/` a `vm7-storage-observability/` son del andamiaje inicial. Los manifiestos de cada servicio todavía no están escritos (`k8s/`).
 5. **Visibilidad de las imágenes:** las imágenes quedan enlazadas a su repo. Si GHCR las deja privadas, k3s no las puede descargar: hay que hacerlas públicas (página del paquete → Package settings) o agregar un `imagePullSecret`.
 
 ## Pendiente
