@@ -4,7 +4,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
   push:
     branches: [develop, main]
     tags: ["v*"]
@@ -15,3 +15,30 @@ permissions:
 jobs:
   contratos:
     uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/ci-contratos.yml@main
+
+  breaking-openapi:
+    if: github.event_name == 'pull_request'
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/breaking-openapi.yml@main
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    uses: ARQUI-202630/quickpatch-infrastructure/.github/workflows/dependency-review.yml@main
+
+  quality-gate:
+    name: quality-gate
+    if: always()
+    needs: [contratos, breaking-openapi, dependency-review]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validar compuertas
+        env:
+          CONTRACT_RESULT: ${{ needs.contratos.result }}
+          BREAK_RESULT: ${{ needs.breaking-openapi.result }}
+          DEP_RESULT: ${{ needs.dependency-review.result }}
+        run: |
+          test "$CONTRACT_RESULT" = "success"
+
+          test "$BREAK_RESULT" = "success" ||           test "$BREAK_RESULT" = "skipped"
+
+          test "$DEP_RESULT" = "success" ||           test "$DEP_RESULT" = "skipped"

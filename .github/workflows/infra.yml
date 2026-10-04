@@ -61,3 +61,89 @@ jobs:
           fetch-depth: 0
       - name: gitleaks (INF-009)
         run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --no-banner --redact
+
+  kubernetes:
+    name: Kubernetes (kubeconform)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Buscar manifiestos
+        id: manifests
+        shell: bash
+        run: |
+          if find k8s -type f \( -name '*.yaml' -o -name '*.yml' \) \
+            2>/dev/null | grep -q .; then
+
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Todavía no hay manifiestos Kubernetes."
+          fi
+
+      - name: Instalar Kubeconform 0.8.0
+        if: steps.manifests.outputs.hay == 'true'
+        run: |
+          curl -fsSL \
+            -o /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+
+          tar -xzf /tmp/kubeconform.tar.gz \
+            -C /tmp kubeconform
+
+          sudo install \
+            /tmp/kubeconform \
+            /usr/local/bin/kubeconform
+
+      - name: Validar manifiestos Kubernetes
+        if: steps.manifests.outputs.hay == 'true'
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            k8s
+
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  quality-gate:
+    name: quality-gate
+    if: always()
+
+    needs:
+      - workflows
+      - ansible
+      - secretos
+      - kubernetes
+      - dependency-review
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validar todas las compuertas
+        env:
+          WORKFLOWS: ${{ needs.workflows.result }}
+          ANSIBLE: ${{ needs.ansible.result }}
+          SECRETS: ${{ needs.secretos.result }}
+          KUBERNETES: ${{ needs.kubernetes.result }}
+          DEPENDENCIES: ${{ needs.dependency-review.result }}
+
+        run: |
+          test "$WORKFLOWS" = "success"
+          test "$ANSIBLE" = "success"
+          test "$SECRETS" = "success"
+          test "$KUBERNETES" = "success"
+
+          test "$DEPENDENCIES" = "success" || \
+          test "$DEPENDENCIES" = "skipped"
