@@ -1,3 +1,4 @@
+{% set entorno = 'qa' if inventory_hostname == 'vm2' else 'prod' %}
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
@@ -12,19 +13,28 @@ scrape_configs:
         labels:
           job: docker
           vm: {{ inventory_hostname }}
+          entorno: {{ entorno }}
           __path__: /var/lib/docker/containers/*/*-json.log
     pipeline_stages:
       - docker: {}
-{% if inventory_hostname == 'vm3' %}
+{% if inventory_hostname in ['vm2', 'vm3'] %}
   - job_name: pods-k3s
     static_configs:
       - targets: [localhost]
         labels:
           job: k3s
           vm: {{ inventory_hostname }}
+          entorno: {{ entorno }}
           __path__: /var/log/pods/*/*/*.log
     pipeline_stages:
       - cri: {}
+      # /var/log/pods/<namespace>_<pod>_<uid>/<contenedor>/<n>.log: el contenedor es el microservicio
+      - regex:
+          source: filename
+          expression: '^/var/log/pods/(?P<namespace>[^_/]+)_[^/]+/(?P<service>[^/]+)/'
+      - labels:
+          namespace:
+          service:
 {% endif %}
   - job_name: sistema
     static_configs:
@@ -32,4 +42,5 @@ scrape_configs:
         labels:
           job: syslog
           vm: {{ inventory_hostname }}
+          entorno: {{ entorno }}
           __path__: /var/log/syslog
