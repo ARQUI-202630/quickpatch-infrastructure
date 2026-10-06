@@ -15,6 +15,14 @@
       community.general.timezone:
         name: America/Bogota
 
+    # El paquete chrony se instala en todas las VMs, pero en Rocky (VM2 y VM5) el servicio no arranca solo:
+    # sin él el reloj se desfasa (VM2 iba ~54 s atrasada) y fallan certificados y firmas de token.
+    - name: Sincronización de hora con chrony
+      ansible.builtin.service:
+        name: "{{ 'chronyd' if ansible_os_family == 'RedHat' else 'chrony' }}"
+        state: started
+        enabled: true
+
     - name: Usuario de despliegue
       ansible.builtin.user:
         name: "{{ deploy_user }}"
