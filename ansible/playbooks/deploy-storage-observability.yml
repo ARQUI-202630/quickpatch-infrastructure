@@ -17,7 +17,11 @@
         path: "{{ item }}"
         state: directory
         mode: "0755"
-      loop: ["{{ dir }}", "{{ dir }}/grafana-provisioning/datasources"]
+      loop:
+        - "{{ dir }}"
+        - "{{ dir }}/grafana-provisioning/datasources"
+        - "{{ dir }}/grafana-provisioning/dashboards"
+        - "{{ dir }}/grafana-provisioning/dashboards-json"
 
     - name: Configuración de Prometheus, Loki y Grafana
       ansible.builtin.template:
@@ -29,6 +33,16 @@
         - { src: loki.yml.j2, dest: loki.yml }
         - { src: grafana-datasources.yml.j2, dest: grafana-provisioning/datasources/datasources.yml }
         - { src: observabilidad.compose.yml.j2, dest: compose.yml }
+      notify: Reiniciar observabilidad
+
+    - name: Dashboards de Grafana (se copian tal cual, sin plantilla)
+      ansible.builtin.copy:
+        src: "../files/grafana/{{ item.src }}"
+        dest: "{{ dir }}/grafana-provisioning/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: dashboards.yml, dest: dashboards/dashboards.yml }
+        - { src: quickpatch-logs.json, dest: dashboards-json/quickpatch-logs.json }
       notify: Reiniciar observabilidad
 
     - name: Configuración de Garage (lleva secretos)
