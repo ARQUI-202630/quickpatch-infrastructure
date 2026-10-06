@@ -1,0 +1,112 @@
+# Alertas de infraestructura de QUICKPATCH (solo lectura: se aprovisionan desde Ansible).
+# Fuente: Prometheus (uid fijo en grafana-datasources.yml.j2). Se copia tal cual, sin plantilla de Ansible,
+# porque las anotaciones usan plantillas de Grafana ({{ $labels.vm }}).
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: infraestructura
+    folder: QUICKPATCH
+    interval: 1m
+    rules:
+      - uid: qp-ram-alta
+        title: RAM alta en una VM
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severidad: alta
+        annotations:
+          summary: "RAM al {{ printf \"%.0f\" $values.B.Value }}% en {{ $labels.vm }}"
+          description: "La VM {{ $labels.vm }} usa más del 85% de su memoria desde hace 5 minutos."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100'
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [85] }
+      - uid: qp-disco-lleno
+        title: Disco casi lleno en una VM
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severidad: alta
+        annotations:
+          summary: "Disco al {{ printf \"%.0f\" $values.B.Value }}% en {{ $labels.vm }}"
+          description: "La partición raíz de {{ $labels.vm }} supera el 85% desde hace 10 minutos."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: '(1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) * 100'
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [85] }
+      - uid: qp-vm-caida
+        title: VM sin métricas (posible caída)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severidad: critica
+        annotations:
+          summary: "{{ $labels.vm }} no responde"
+          description: "Prometheus no consigue leer node_exporter de {{ $labels.vm }} desde hace 2 minutos: la VM o su agente están caídos."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 180, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'up{job="node"}'
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [1] }

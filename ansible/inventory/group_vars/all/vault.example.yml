@@ -20,6 +20,7 @@ vault_garage_keys:
   servicios: { id: CAMBIAR, secret: CAMBIAR }   # evidencias (los servicios de VM3)
   backups: { id: CAMBIAR, secret: CAMBIAR }     # respaldos de PostgreSQL (VM4)
 vault_grafana_admin_password: CAMBIAR
+vault_smtp_password: CAMBIAR   # contraseña de aplicación de Gmail para las alertas de Grafana (opcional: sin ella no hay correo)
 vault_github_runner_token: CAMBIAR   # token de registro del runner, a nivel de organización
 
 # QA (ADR-015): secretos propios, nunca los de producción
