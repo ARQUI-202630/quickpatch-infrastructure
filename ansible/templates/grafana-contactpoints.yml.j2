@@ -1,0 +1,10 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: correo-universidad
+    receivers:
+      - uid: qp-correo
+        type: email
+        settings:
+          addresses: "{{ alertas_correo }}"
+          singleEmail: true

@@ -28,6 +28,13 @@ ip:
   vm6: 10.43.99.12
   vm7: 10.43.99.8
 
+# --- Alertas de Grafana por correo ----------------------------------------------
+# Remitente: cuenta de Gmail con contraseña de aplicación (vault_smtp_password). Sin esa clave,
+# Grafana arranca con el correo desactivado y las reglas solo se ven en el panel.
+alertas_correo: sanchezse@javeriana.edu.co
+smtp_servidor: smtp.gmail.com:587
+smtp_usuario: sebastiansanchez3004@gmail.com
+
 # --- Rutas --------------------------------------------------------------------
 stack_dir: /opt/quickpatch
 

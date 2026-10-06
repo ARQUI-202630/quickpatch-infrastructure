@@ -22,6 +22,7 @@
         - "{{ dir }}/grafana-provisioning/datasources"
         - "{{ dir }}/grafana-provisioning/dashboards"
         - "{{ dir }}/grafana-provisioning/dashboards-json"
+        - "{{ dir }}/grafana-provisioning/alerting"
 
     - name: Configuración de Prometheus, Loki y Grafana
       ansible.builtin.template:
@@ -32,6 +33,7 @@
         - { src: prometheus.yml.j2, dest: prometheus.yml }
         - { src: loki.yml.j2, dest: loki.yml }
         - { src: grafana-datasources.yml.j2, dest: grafana-provisioning/datasources/datasources.yml }
+        - { src: grafana-contactpoints.yml.j2, dest: grafana-provisioning/alerting/contactpoints.yml }
         - { src: observabilidad.compose.yml.j2, dest: compose.yml }
       notify: Reiniciar observabilidad
 
@@ -43,6 +45,8 @@
       loop:
         - { src: dashboards.yml, dest: dashboards/dashboards.yml }
         - { src: quickpatch-logs.json, dest: dashboards-json/quickpatch-logs.json }
+        - { src: alerting/rules.yml, dest: alerting/rules.yml }
+        - { src: alerting/policies.yml, dest: alerting/policies.yml }
       notify: Reiniciar observabilidad
 
     - name: Configuración de Garage (lleva secretos)
