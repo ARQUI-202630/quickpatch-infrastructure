@@ -1,4 +1,5 @@
-# VM5: Redis (sección 5.2). Solo escucha en la IP de la VM y exige contraseña.
+# VM4: Redis de producción, junto a PostgreSQL (ADR-022, sección 5.2). Solo escucha en la IP de la VM.
+# Un usuario ACL por servicio, restringido a su prefijo de claves, reemplaza la contraseña única compartida.
 - name: Cache
   hosts: cache
   vars:
@@ -6,20 +7,25 @@
   tasks:
     - name: Carpeta
       ansible.builtin.file: { path: "{{ dir }}", state: directory, mode: "0750" }
+
+    - name: Usuarios de Redis (llevan secretos; el contenedor corre como el usuario 999)
+      ansible.builtin.template:
+        src: ../templates/redis-users.acl.j2
+        dest: "{{ dir }}/users.acl"
+        owner: "999"
+        mode: "0600"
+      notify: Reiniciar Redis
+
     - name: Compose de Redis
-      ansible.builtin.copy:
+      ansible.builtin.template:
+        src: ../templates/redis.compose.yml.j2
         dest: "{{ dir }}/compose.yml"
         mode: "0640"
-        content: |
-          services:
-            redis:
-              image: {{ images.redis }}
-              network_mode: host
-              restart: unless-stopped
-              command: >
-                redis-server --bind {{ ansible_host }} --port 6379
-                --requirepass {{ vault_redis_password }}
-                --maxmemory 6gb --maxmemory-policy allkeys-lru
-                --appendonly no
+      notify: Reiniciar Redis
+
     - name: Levantar Redis
       community.docker.docker_compose_v2: { project_src: "{{ dir }}", state: present }
+
+  handlers:
+    - name: Reiniciar Redis
+      community.docker.docker_compose_v2: { project_src: "{{ dir }}", state: restarted }
