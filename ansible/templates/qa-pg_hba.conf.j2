@@ -1,7 +1,6 @@
 local   all   postgres                    peer
 host    all   postgres   127.0.0.1/32     scram-sha-256
-# Los pods de k3s de QA (rango de pods y la IP de la VM)
+# El k3s de QA está en VM5: sus pods salen a la red con la IP del nodo (ADR-021)
 {% for db in postgres_databases %}
-host    db_{{ db }}   app_{{ db }}   {{ k3s_cluster_cidr }}    scram-sha-256
-host    db_{{ db }}   app_{{ db }}   {{ ansible_host }}/32     scram-sha-256
+host    db_{{ db }}   app_{{ db }}   {{ ip.vm5 }}/32    scram-sha-256
 {% endfor %}

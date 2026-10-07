@@ -1,19 +1,19 @@
-# Orden completo (sección 5.4). Producción: VM1 y VM3 a VM7. QA: VM2 (ADR-015).
+# Orden completo (sección 5.4, ADR-021). Producción: VM1, VM3 y VM4. QA: VM2, VM5 y VM6. Herramientas: VM7.
 # Storage y observabilidad va antes que la base de datos porque el respaldo escribe en Garage.
 # k3s de producción y QA van antes que el runner, que necesita sus kubeconfig.
 - name: Configuración base de las VMs
   ansible.builtin.import_playbook: setup-base.yml
 - name: Almacenamiento y observabilidad (VM7)
   ansible.builtin.import_playbook: deploy-storage-observability.yml
-- name: Base de datos (VM4)
+- name: Base de datos de producción (VM4)
   ansible.builtin.import_playbook: deploy-db.yml
-- name: Cache (VM5)
+- name: Cache de producción (VM4)
   ansible.builtin.import_playbook: deploy-cache.yml
-- name: Mensajería (VM6)
+- name: Mensajería de producción (VM4)
   ansible.builtin.import_playbook: deploy-kafka.yml
 - name: K3s de producción (VM3)
   ansible.builtin.import_playbook: deploy-k3s.yml
-- name: Ambiente de QA (VM2)
+- name: Ambiente de QA (VM6, VM5 y VM2)
   ansible.builtin.import_playbook: deploy-qa.yml
 - name: Gateway (VM1)
   ansible.builtin.import_playbook: deploy-gateway.yml

@@ -1,14 +1,13 @@
-# VM2: ambiente de QA (ADR-015). El sistema completo en una sola VM:
-# - k3s con los 8 microservicios, igual que producción (prueba también el rolling update).
-# - PostgreSQL, Redis, Kafka y Garage (S3) propios, con datos de prueba y secretos propios.
-# - Nginx con HTTPS autofirmado como entrada: /api/ a k3s y / al panel Angular.
-# Logs y métricas van a VM7 (setup-base.yml). La prueba de carga con k6 se hace aquí.
-- name: Ambiente de QA
-  hosts: qa
+# Ambiente de QA (ADR-015, ADR-021): la misma forma que producción, en tres VMs.
+# - VM6 (qa_datos): PostgreSQL, Redis, Kafka y Garage propios, con datos de prueba y secretos propios.
+# - VM5 (qa_servicios): k3s con los 8 microservicios, igual que producción (prueba también el rolling update).
+# - VM2 (qa_entrada): Nginx con HTTPS autofirmado: /api/ al k3s de VM5 y / al panel Angular.
+# El orden importa: datos, servicios y entrada. Logs y métricas van a VM7 (setup-base.yml).
+# La prueba de carga con k6 se hace desde el runner de VM1 contra la entrada de QA.
+- name: QA, datos (VM6)
+  hosts: qa_datos
   vars:
     dir: "{{ stack_dir }}/qa"
-    k3s_namespace: quickpatch
-    kubeconfig_name: qa
     garage_compose_dir: "{{ dir }}"
     garage_rpc_secret: "{{ vault_qa_garage_rpc_secret }}"
     garage_admin_token: "{{ vault_qa_garage_admin_token }}"
@@ -17,9 +16,6 @@
     garage_permisos:
       - { bucket: evidencias, llave: servicios }
   tasks:
-    - name: Instalar k3s
-      ansible.builtin.include_tasks: ../tasks/k3s.yml
-
     - name: Carpetas
       ansible.builtin.file:
         path: "{{ item.path }}"
@@ -29,6 +25,56 @@
       loop:
         - { path: "{{ dir }}", mode: "0755" }
         - { path: "{{ dir }}/init", mode: "0700", owner: "999" }   # usuario postgres del contenedor
+
+    - name: Configuración de los datos de QA (PostgreSQL, Garage y compose)
+      ansible.builtin.template:
+        src: "../templates/{{ item.src }}"
+        dest: "{{ dir }}/{{ item.dest }}"
+        owner: "{{ item.owner | default('root') }}"
+        mode: "{{ item.mode | default('0644') }}"
+      loop:
+        - { src: qa-postgres-init.sql.j2, dest: init/01-quickpatch-qa.sql, owner: "999", mode: "0600" }
+        - { src: qa-pg_hba.conf.j2, dest: pg_hba.conf }
+        - { src: qa-datos.compose.yml.j2, dest: compose.yml, mode: "0600" }
+        - { src: garage.toml.j2, dest: garage.toml, mode: "0600" }
+      notify: Reiniciar los datos de QA
+
+    - name: Levantar PostgreSQL, Redis, Kafka y Garage de QA
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: present
+
+    - name: Layout, llaves y buckets de Garage
+      ansible.builtin.include_tasks: ../tasks/garage.yml
+
+  handlers:
+    - name: Reiniciar los datos de QA
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: restarted
+
+- name: QA, servicios (VM5)
+  hosts: qa_servicios
+  vars:
+    k3s_namespace: quickpatch
+    kubeconfig_name: qa
+  tasks:
+    - name: Instalar k3s
+      ansible.builtin.include_tasks: ../tasks/k3s.yml
+
+- name: QA, entrada (VM2)
+  hosts: qa_entrada
+  vars:
+    dir: "{{ stack_dir }}/qa"
+  tasks:
+    - name: Carpetas
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner | default('root') }}"
+      loop:
+        - { path: "{{ dir }}", mode: "0755" }
         - { path: "{{ dir }}/certs", mode: "0750" }
         - { path: "{{ dir }}/panel", mode: "0755", owner: "{{ deploy_user }}" }   # la escribe el runner (deploy-panel.yml)
 
@@ -49,30 +95,26 @@
         force: false
         content: "<!doctype html><title>QUICKPATCH QA</title><p>Ambiente de QA: pendiente del primer build de Angular.</p>\n"
 
-    - name: Configuración de QA (PostgreSQL, Nginx y compose)
+    - name: Configuración de la entrada de QA (Nginx y compose)
       ansible.builtin.template:
         src: "../templates/{{ item.src }}"
         dest: "{{ dir }}/{{ item.dest }}"
-        owner: "{{ item.owner | default('root') }}"
         mode: "{{ item.mode | default('0644') }}"
       loop:
-        - { src: qa-postgres-init.sql.j2, dest: init/01-quickpatch-qa.sql, owner: "999", mode: "0600" }
-        - { src: qa-pg_hba.conf.j2, dest: pg_hba.conf }
         - { src: qa-nginx.conf.j2, dest: nginx.conf }
-        - { src: qa.compose.yml.j2, dest: compose.yml, mode: "0600" }
-        - { src: garage.toml.j2, dest: garage.toml, mode: "0600" }
-      notify: Reiniciar QA
+        - { src: qa-entrada.compose.yml.j2, dest: compose.yml, mode: "0600" }
+      notify: Reiniciar la entrada de QA
 
-    - name: Levantar los componentes de QA
+    # remove_orphans quita de VM2 los contenedores del QA anterior (PostgreSQL, Redis, Kafka y Garage),
+    # que ahora viven en VM6. Los volúmenes y k3s los limpia migrar-reparto-vms.yml.
+    - name: Levantar Nginx de QA
       community.docker.docker_compose_v2:
         project_src: "{{ dir }}"
         state: present
-
-    - name: Layout, llaves y buckets de Garage
-      ansible.builtin.include_tasks: ../tasks/garage.yml
+        remove_orphans: true
 
   handlers:
-    - name: Reiniciar QA
+    - name: Reiniciar la entrada de QA
       community.docker.docker_compose_v2:
         project_src: "{{ dir }}"
         state: restarted

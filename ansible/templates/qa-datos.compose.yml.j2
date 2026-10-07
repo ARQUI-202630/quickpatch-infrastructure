@@ -1,16 +1,5 @@
-# QA en VM2 (ADR-015). Red de host: ufw solo abre el 443 (equipo y k6 desde VM1) y el 6443 (runner).
-# Los demás puertos escuchan en 127.0.0.1 o en la IP de la VM, sin regla en el firewall.
+# QA, datos, en VM6 (ADR-021): PostgreSQL, Redis, Kafka y Garage. Red de host: ufw solo deja entrar al k3s de QA (VM5).
 services:
-  nginx:
-    image: {{ images.nginx }}
-    network_mode: host
-    restart: unless-stopped
-{% if ansible_os_family == 'RedHat' %}    security_opt: [label=disable]   # SELinux: leer la configuración montada
-{% endif %}    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-      - ./panel:/usr/share/nginx/panel:ro
-
   postgres:
     image: {{ images.postgis }}
     network_mode: host

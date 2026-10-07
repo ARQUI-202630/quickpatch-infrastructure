@@ -1,4 +1,4 @@
-# VM5: Redis (sección 5.2). Solo escucha en la IP de la VM y exige contraseña.
+# VM4: Redis de producción, junto a PostgreSQL y Kafka (ADR-021, sección 5.2). Solo escucha en la IP de la VM y exige contraseña.
 - name: Cache
   hosts: cache
   vars:
@@ -19,7 +19,7 @@
               command: >
                 redis-server --bind {{ ansible_host }} --port 6379
                 --requirepass {{ vault_redis_password }}
-                --maxmemory 6gb --maxmemory-policy allkeys-lru
+                --maxmemory {{ redis_maxmemory }} --maxmemory-policy allkeys-lru
                 --appendonly no
     - name: Levantar Redis
       community.docker.docker_compose_v2: { project_src: "{{ dir }}", state: present }

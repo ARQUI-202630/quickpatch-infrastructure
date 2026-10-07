@@ -1,5 +1,5 @@
 # VM1: runner self-hosted de GitHub Actions, registrado en la organización (sección 6.3).
-# Despliega a QA (VM2) y a producción (VM3), y corre la prueba de carga con k6 contra QA.
+# Despliega a QA (k3s en VM5) y a producción (k3s en VM3), y corre la prueba de carga con k6 contra la entrada de QA (VM2).
 # Está en la red privada, donde los runners de GitHub no llegan.
 # SEGURIDAD: en GitHub, restringir este runner a los repos de QUICKPATCH (grupo de runners)
 # y no usarlo nunca en workflows disparados por pull_request de forks.
@@ -30,7 +30,7 @@
         owner: "{{ deploy_user }}"
         mode: "0600"
       loop:
-        - { nombre: qa, ip: "{{ ip.vm2 }}" }
+        - { nombre: qa, ip: "{{ ip.vm5 }}" }   # API de k3s de QA (ADR-021)
         - { nombre: produccion, ip: "{{ ip.vm3 }}" }
       loop_control:
         label: "{{ item.nombre }}"

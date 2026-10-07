@@ -10,10 +10,10 @@ Los pipelines viven en este repo como **workflows reutilizables** (`.github/work
 |---|---|
 | 0. Pre-push local | `plantillas/hooks/pre-push`, que cada persona instala en su clon |
 | 1. CI del componente: lint, unitarias, Testcontainers, cobertura ≥ 80% | `ci-dotnet.yml`, `ci-java.yml`, `ci-angular.yml`, `ci-flutter.yml` y la acción `cobertura`; contratos en `ci-contratos.yml` |
-| 2. Pruebas de sistema: E2E, OWASP ZAP, escáner PCI-DSS | `pruebas-sistema.yml` del repo principal, contra QA (VM2) en `release/*` |
+| 2. Pruebas de sistema: E2E, OWASP ZAP, escáner PCI-DSS | `pruebas-sistema.yml` del repo principal, contra la entrada de QA (VM2) en `release/*` |
 | 3. Carga con k6 | `pruebas-sistema.yml` del repo principal, contra QA, después de E2E y seguridad |
 
-La diferencia con el texto actual del Documento de Pruebas: las compuertas 2 y 3 corren contra QA en VM2, no en un staging efímero ni en producción (ADR-015).
+La diferencia con el texto actual del Documento de Pruebas: las compuertas 2 y 3 corren contra QA (entrada en VM2, servicios en VM5), no en un staging efímero ni en producción (ADR-015).
 
 ## Qué corre en cada rama
 
@@ -21,7 +21,7 @@ La diferencia con el texto actual del Documento de Pruebas: las compuertas 2 y 3
 |---|---|---|---|
 | PR a `develop` | Lint, pruebas unitarias y cobertura | Lint, pruebas, cobertura y build | Formato, análisis, pruebas y cobertura |
 | Push a `develop` | Además, pruebas de integración (Testcontainers) | Lo mismo | Lo mismo |
-| Push a `release/*` | Además, imagen en GHCR y **despliegue en QA** (k3s de VM2) | Además, **publica el panel en QA** (VM2) | Además, APK de release |
+| Push a `release/*` | Además, imagen en GHCR y **despliegue en QA** (k3s de VM5) | Además, **publica el panel en QA** (VM2) | Además, APK de release |
 | Push a `main` | **Despliegue en producción** (k3s de VM3) con la misma imagen de QA | **Publica el panel en producción** (VM1) | APK de release |
 
 QA solo cambia cuando se prepara una versión (`release/*`), no con cada push a `develop`.

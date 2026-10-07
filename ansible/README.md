@@ -2,7 +2,13 @@
 
 Aprovisiona las 7 VMs según el Documento de Infraestructura (secciones 5, 7, 8, 9 y 10).
 
-Producción usa VM1 y VM3 a VM7. **VM2 es el ambiente de QA** (ADR-015), y el panel Angular vive en el gateway de VM1.
+Reparto de las 7 VMs (ADR-021): **1 de herramientas, 3 de producción y 3 de QA**, y producción y QA tienen la misma forma (entrada, servicios y datos). El panel Angular de producción vive en el gateway de VM1.
+
+| Ambiente | Entrada | Servicios | Datos |
+|---|---|---|---|
+| Producción | VM1 (grupo `gateway`) | VM3 (`backend`) | VM4 (`database`, `cache` y `messaging`) |
+| QA | VM2 (`qa_entrada`) | VM5 (`qa_servicios`) | VM6 (`qa_datos`) |
+| Herramientas | VM7 (`storage_observability`) | | |
 
 ## Ejecutar sin instalar nada
 
@@ -67,10 +73,11 @@ Primero solo lectura, después en modo simulación y al final de verdad:
 | `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
 | `deploy-storage-observability.yml` | VM7 | Garage (S3), Prometheus, Loki y Grafana; buckets y llaves de Garage |
 | `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
-| `deploy-cache.yml` | VM5 | Redis con contraseña |
-| `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
+| `deploy-cache.yml` | VM4 | Redis con contraseña (tope de memoria `redis_maxmemory`, porque comparte VM) |
+| `deploy-kafka.yml` | VM4 | Kafka en modo KRaft y Kafka UI (sin puerto abierto: se entra por túnel SSH) |
 | `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |
-| `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, Garage y Nginx, con secretos propios |
+| `deploy-qa.yml` | VM6, VM5 y VM2 | QA en tres partes y en este orden: datos (PostgreSQL, Redis, Kafka y Garage, VM6), servicios (k3s, VM5) y entrada (Nginx y panel, VM2), con secretos propios |
+| `migrar-reparto-vms.yml` | VM5, VM6 y VM2 | **Una sola vez, destructivo:** limpia lo del reparto anterior (ver abajo). Exige `-e confirmar_borrado=true` |
 | `deploy-gateway.yml` | VM1 | Nginx con HTTPS autofirmado: producción (`/api/` a VM3 y `/` al panel Angular), QA (VM2) y Grafana (VM7) |
 | `deploy-runner.yml` | VM1 | Runner self-hosted de la organización, kubeconfig de QA y producción, y k6 |
 
@@ -81,7 +88,7 @@ Desde la VPN, el firewall perimetral de la universidad solo deja pasar el 443 de
 | Dirección | Destino | Quién entra |
 |---|---|---|
 | `https://quickpatch.internal` (o la IP de VM1) | Producción: panel y `/api/` | Cualquiera |
-| `https://qa.quickpatch.internal` | QA en VM2 | Solo la red del equipo (`team_networks`) |
+| `https://qa.quickpatch.internal` | QA (entrada en VM2) | Solo la red del equipo (`team_networks`) |
 | `https://grafana.quickpatch.internal` | Grafana en VM7 | Solo la red del equipo, con login |
 
 No hay DNS, así que cada persona agrega esta línea una vez a su archivo hosts (`C:\Windows\System32\drivers\etc\hosts` en Windows, abierto como administrador; `/etc/hosts` en Linux y macOS):
@@ -98,6 +105,18 @@ El certificado es autofirmado: el navegador muestra una advertencia la primera v
 - **El firewall abre el 22 antes de activarse**, para no perder la conexión.
 - **SSH con contraseña, sin login de `root`.** Se decidió no exigir llaves (Documento de Infraestructura, sección 10.4). Si algún día se decide, `deploy_user_pubkeys` y `ssh_disable_password_auth` ya lo permiten.
 - **El escritorio remoto (3389) queda abierto para la VPN del equipo**, porque el laboratorio lo usa y activar `ufw` lo bloquearía.
-- **QA no puede llegar a producción:** PostgreSQL, Redis, Kafka y Garage de producción solo aceptan conexiones desde VM3 (y Garage, también desde VM4 para el respaldo).
+- **QA no puede llegar a producción:** PostgreSQL, Redis y Kafka de producción (VM4) solo aceptan conexiones desde VM3, y Garage (VM7), desde VM3 y VM4 para el respaldo. Los datos de QA (VM6) solo aceptan a VM5.
 - **Garage con una llave por uso:** `servicios` solo accede a `evidencias` y `backups` solo a `backups-postgres`. Las llaves se definen en el vault y el playbook las importa (`tasks/garage.yml`).
-- **En VM2 y VM3, `ufw` permite el tráfico interno de k3s** (rangos de pods y servicios); sin eso los pods no se comunican.
+- **En VM3 y VM5, el firewall permite el tráfico interno de k3s** (rangos de pods y servicios); sin eso los pods no se comunican.
+
+## Cómo migrar al reparto del ADR-021
+
+Se hace una sola vez, por fases y **en este orden**, porque VM5 y VM6 eran producción (Redis y Kafka) y pasan a ser QA. Todo estaba vacío: no hay datos que mover. Cada paso se prueba antes con `--check`.
+
+1. `./ap playbooks/setup-base.yml --check --diff` y luego sin `--check`: firewall nuevo en las 7 VMs.
+2. Producción: `deploy-db.yml`, `deploy-cache.yml` y `deploy-kafka.yml` (los tres ahora en VM4).
+3. `./ap playbooks/migrar-reparto-vms.yml --tags vm5,vm6 -e confirmar_borrado=true`: quita el Redis de VM5 y el Kafka de VM6 (QA usa el mismo puerto 9092).
+4. `./ap playbooks/deploy-qa.yml`: datos (VM6), k3s (VM5) y entrada (VM2). Después `deploy-runner.yml`, para que el runner tome el kubeconfig de QA nuevo (ahora apunta a VM5).
+5. `./ap playbooks/migrar-reparto-vms.yml --tags vm2 -e confirmar_borrado=true`: quita el k3s y los volúmenes del QA anterior de VM2.
+
+Kafka UI de producción no tiene puerto abierto (el perímetro de la universidad solo dejaba pasar el 8080 de VM6): se entra con `ssh -L 8080:10.43.98.209:8080 estudiante@10.43.98.209` y luego `http://localhost:8080`.

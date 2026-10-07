@@ -1,0 +1,80 @@
+# Limpieza ÚNICA tras el reparto de VMs del ADR-021. DESTRUCTIVA: borra contenedores, volúmenes y k3s
+# del reparto anterior (todos estaban vacíos: no había servicios ni datos).
+#
+# Hay que correrla por fases, en este orden, y solo con -e confirmar_borrado=true:
+#   1. Desplegar los datos de producción en VM4 (deploy-db, deploy-cache y deploy-kafka).
+#   2. --tags vm5,vm6   quita el Redis de producción de VM5 y el Kafka de producción de VM6.
+#      (VM6 tiene que quedar libre antes de levantar el Kafka de QA: ambos usan el puerto 9092.)
+#   3. Desplegar QA (deploy-qa.yml).
+#   4. --tags vm2       quita el k3s y los volúmenes del QA anterior de VM2.
+- name: Quitar el Redis de producción de VM5
+  hosts: qa_servicios
+  tags: [vm5]
+  vars:
+    dir: "{{ stack_dir }}/redis"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe el Redis anterior?
+      ansible.builtin.stat: { path: "{{ dir }}/compose.yml" }
+      register: redis_viejo
+    - name: Bajar Redis y borrar su volumen
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: absent
+        remove_volumes: true
+      when: redis_viejo.stat.exists
+    - name: Borrar la carpeta de Redis
+      ansible.builtin.file: { path: "{{ dir }}", state: absent }
+
+- name: Quitar el Kafka de producción de VM6
+  hosts: qa_datos
+  tags: [vm6]
+  vars:
+    dir: "{{ stack_dir }}/kafka"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe el Kafka anterior?
+      ansible.builtin.stat: { path: "{{ dir }}/compose.yml" }
+      register: kafka_viejo
+    - name: Bajar Kafka y Kafka UI y borrar sus volúmenes
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: absent
+        remove_volumes: true
+      when: kafka_viejo.stat.exists
+    - name: Borrar la carpeta de Kafka
+      ansible.builtin.file: { path: "{{ dir }}", state: absent }
+
+- name: Quitar el k3s y los datos del QA anterior de VM2
+  hosts: qa_entrada
+  tags: [vm2]
+  vars:
+    dir: "{{ stack_dir }}/qa"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe el instalador de k3s?
+      ansible.builtin.stat: { path: /usr/local/bin/k3s-uninstall.sh }
+      register: k3s_viejo
+    - name: Desinstalar k3s de VM2
+      ansible.builtin.command: /usr/local/bin/k3s-uninstall.sh
+      when: k3s_viejo.stat.exists
+      changed_when: true
+    - name: Borrar los volúmenes del QA anterior
+      community.docker.docker_volume:
+        name: "qa_{{ item }}"
+        state: absent
+      loop: [pgdata, kafka-data, garage-meta, garage-data]
+    - name: Borrar la configuración del QA anterior
+      ansible.builtin.file:
+        path: "{{ dir }}/{{ item }}"
+        state: absent
+      loop: [init, pg_hba.conf, garage.toml]

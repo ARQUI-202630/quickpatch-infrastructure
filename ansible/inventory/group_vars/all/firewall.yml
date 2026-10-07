@@ -12,20 +12,24 @@ firewall_common:
 firewall_by_host:
   vm1:
     - { port: 443, from: [any], comment: "HTTPS publico (unico punto de entrada)" }
-  vm2:   # QA (ADR-015). Producción no acepta conexiones desde VM2: sus reglas solo admiten a VM3.
+  vm2:   # QA, entrada (ADR-021). Producción no acepta conexiones desde QA.
     - { port: 443, from: "{{ team_networks + [ip.vm1] }}", comment: "Equipo y k6 (runner de VM1) -> QA" }
-    - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s de QA" }
   vm3:
     - { port: 30080, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTP)" }
     - { port: 30443, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTPS)" }
     - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s" }
-  vm4:
+  vm4:   # Producción, datos (ADR-021): PostgreSQL, Redis y Kafka. Kafka UI (8080) no se abre: se entra por túnel SSH.
     - { port: 5432, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> PostgreSQL" }
-  vm5:
     - { port: 6379, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Redis" }
-  vm6:
     - { port: 9092, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Kafka" }
-    - { port: 8080, from: "{{ team_networks }}", comment: "Equipo -> Kafka UI" }
+  vm5:   # QA, servicios (ADR-021): k3s de QA
+    - { port: 30080, from: ["{{ ip.vm2 }}"], comment: "Nginx de QA -> Traefik (HTTP)" }
+    - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s de QA" }
+  vm6:   # QA, datos (ADR-021): solo el k3s de QA (VM5) puede entrar
+    - { port: 5432, from: ["{{ ip.vm5 }}"], comment: "k3s de QA -> PostgreSQL" }
+    - { port: 6379, from: ["{{ ip.vm5 }}"], comment: "k3s de QA -> Redis" }
+    - { port: 9092, from: ["{{ ip.vm5 }}"], comment: "k3s de QA -> Kafka" }
+    - { port: 9000, from: ["{{ ip.vm5 }}"], comment: "k3s de QA -> Garage (S3)" }
   vm7:
     - { port: 9000, from: ["{{ ip.vm3 }}", "{{ ip.vm4 }}"], comment: "Evidencias y backup -> Garage (S3)" }
     - { port: 3100, from: "{{ all_vms }}", comment: "Promtail -> Loki" }

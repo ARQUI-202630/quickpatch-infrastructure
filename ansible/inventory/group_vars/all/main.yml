@@ -67,7 +67,7 @@ k3s_version: v1.31.4+k3s1
 
 # Almacenamiento de objetos (evidencias y respaldos): Garage, compatible con S3 (ADR-016).
 # Reemplaza a MinIO, que dejó de distribuir imágenes y binarios en 2025. API S3 en el puerto
-# 9000 de VM7 (producción) y de VM2 (QA); RPC y administración solo en localhost.
+# 9000 de VM7 (producción) y de VM6 (QA); RPC y administración solo en localhost.
 garage_region: garage
 
 # --- k3s (sección 5.2: fuera del rango del laboratorio, 10.43.0.0/16) ---------
@@ -89,8 +89,13 @@ postgres_databases:
   - communication
 postgis_databases: [matching]
 
-# --- QA (ADR-015) --------------------------------------------------------------
-# Mismos componentes que producción, con memoria reducida para caber en una VM.
+# --- Memoria de los datos de producción (ADR-021) --------------------------------
+# PostgreSQL, Redis y Kafka comparten VM4 (11 GiB). Redis ya no tiene una VM propia: su tope baja
+# de 6 GB a 1 GB. Kafka conserva su heap (deploy-kafka.yml: -Xms1g -Xmx2g).
+redis_maxmemory: 1gb
+
+# --- QA (ADR-015, ADR-021) -----------------------------------------------------
+# Mismos componentes que producción, con memoria reducida.
 qa_kafka_heap: "-Xms512m -Xmx1g"
 qa_redis_maxmemory: 512mb
 backup_retention_days: 7
