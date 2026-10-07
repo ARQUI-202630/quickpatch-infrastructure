@@ -1,4 +1,4 @@
-{% set entorno = 'qa' if inventory_hostname == 'vm2' else 'prod' %}
+{% set entorno = 'qa' if inventory_hostname in groups['qa'] else 'prod' %}
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
@@ -17,7 +17,7 @@ scrape_configs:
           __path__: /var/lib/docker/containers/*/*-json.log
     pipeline_stages:
       - docker: {}
-{% if inventory_hostname in ['vm2', 'vm3'] %}
+{% if inventory_hostname in groups['backend'] + groups['qa_app'] %}
   - job_name: pods-k3s
     static_configs:
       - targets: [localhost]

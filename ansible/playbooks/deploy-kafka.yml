@@ -1,8 +1,9 @@
-# VM6: Apache Kafka en modo KRaft (sin ZooKeeper) + Kafka UI de producción (ADR-022, sección 5.2).
+# Apache Kafka en modo KRaft (sin ZooKeeper) + Kafka UI de producción (VM6) y de QA (VM7), con el mismo playbook
+# (ADR-022, sección 5.2).
 # Kafka UI escucha en la IP de la VM pero el firewall no abre el 8080: se entra por túnel SSH
 # (ssh -L 8080:<IP de VM6>:8080 estudiante@<IP de VM6>).
 - name: Mensajería
-  hosts: messaging
+  hosts: messaging:qa_mensajeria
   vars:
     dir: "{{ stack_dir }}/kafka"
   tasks:
@@ -30,8 +31,8 @@
                 KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
                 KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
                 KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-                KAFKA_LOG_RETENTION_HOURS: 168
-                KAFKA_HEAP_OPTS: "-Xms1g -Xmx2g"
+                KAFKA_LOG_RETENTION_HOURS: {{ kafka_retencion_horas }}
+                KAFKA_HEAP_OPTS: "{{ kafka_heap }}"
               volumes:
                 - kafka-data:/var/lib/kafka/data
             kafka-ui:

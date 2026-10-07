@@ -1,10 +1,11 @@
-# Redis de producción en VM4 (ADR-022), con usuarios ACL por servicio. Red de host: ufw solo deja entrar a VM3 al 6379.
+# Redis de {{ 'producción en VM4' if entorno == 'produccion' else 'QA en VM5' }} (ADR-022), con usuarios ACL por servicio. Red de host: ufw solo deja entrar a {{ 'VM3' if entorno == 'produccion' else 'VM2' }} al 6379.
 services:
   redis:
     image: {{ images.redis }}
     network_mode: host
     restart: unless-stopped
-    command: >
+{% if ansible_os_family == 'RedHat' %}    security_opt: [label=disable]   # SELinux: leer la configuración montada
+{% endif %}    command: >
       redis-server --bind {{ ansible_host }} --port 6379
       --aclfile /etc/redis/users.acl
       --maxmemory {{ redis_maxmemory }} --maxmemory-policy allkeys-lru

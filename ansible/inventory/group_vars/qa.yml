@@ -1,0 +1,28 @@
+# Variables del ambiente de QA (ADR-022): VM2, VM5 y VM7. Mismos nombres que group_vars/produccion.yml, con
+# secretos propios (ninguna contraseña de QA es igual a la de producción) y menos memoria.
+entorno: qa
+kubeconfig_name: qa
+
+# PostgreSQL (VM5): solo VM2 (k3s de QA) puede conectarse. QA no tiene respaldo: sus datos son de prueba.
+pg_superuser_password: "{{ vault_qa_postgres_superuser_password }}"
+pg_service_passwords: "{{ vault_qa_service_db_passwords }}"
+pg_client_ip: "{{ ip.vm2 }}"
+pg_respaldo: false
+
+# Redis (VM5)
+redis_admin_password: "{{ vault_qa_redis_admin_password }}"
+redis_users: "{{ vault_qa_redis_users }}"
+redis_maxmemory: 512mb
+
+# Kafka (VM7)
+kafka_heap: "-Xms512m -Xmx1g"
+kafka_retencion_horas: 24
+
+# Garage (VM7): sin respaldos de PostgreSQL, solo las evidencias de QA
+garage_capacidad: 10G
+garage_rpc_secret: "{{ vault_qa_garage_rpc_secret }}"
+garage_admin_token: "{{ vault_qa_garage_admin_token }}"
+garage_llaves:
+  service-request: "{{ vault_qa_garage_keys.service_request }}"
+garage_permisos:
+  - { bucket: service-request-evidencias, llave: service-request }

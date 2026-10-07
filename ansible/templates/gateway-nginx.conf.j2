@@ -51,8 +51,15 @@ http {
 {% endfor %}
     deny all;
 
+    # TLS termina aquí. QA es un k3s en VM2 (ADR-022): el gateway y el panel de QA entran por Traefik.
     location / {
-      proxy_pass https://{{ ip.vm2 }};   # certificado autofirmado de QA: Nginx no lo verifica
+      proxy_pass http://{{ ip.vm2 }}:30080;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
     }
   }
 

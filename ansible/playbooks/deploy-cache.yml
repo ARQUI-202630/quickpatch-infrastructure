@@ -1,7 +1,8 @@
-# VM4: Redis de producción, junto a PostgreSQL (ADR-022, sección 5.2). Solo escucha en la IP de la VM.
+# Redis de producción (VM4, junto a PostgreSQL) y de QA (VM5), con el mismo playbook (ADR-022, sección 5.2).
+# Solo escucha en la IP de la VM.
 # Un usuario ACL por servicio, restringido a su prefijo de claves, reemplaza la contraseña única compartida.
 - name: Cache
-  hosts: cache
+  hosts: cache:qa_datos
   vars:
     dir: "{{ stack_dir }}/redis"
   tasks:

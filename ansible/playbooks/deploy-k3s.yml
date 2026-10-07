@@ -1,9 +1,9 @@
-# VM3: k3s de producción con los 8 microservicios (secciones 5.2 y 5.3).
-- name: K3s de producción
-  hosts: backend
+# k3s de un nodo con los 8 microservicios, en producción (VM3) y en QA (VM2), con el mismo playbook
+# (ADR-022, secciones 5.2 y 5.3). El nombre del kubeconfig sale de group_vars (produccion o qa).
+- name: K3s
+  hosts: backend:qa_app
   vars:
     k3s_namespace: quickpatch
-    kubeconfig_name: produccion
   tasks:
     - name: Instalar k3s
       ansible.builtin.include_tasks: ../tasks/k3s.yml

@@ -5,7 +5,7 @@
    - un usuario por servicio, restringido a sus claves y canales <servicio>:* y sin comandos peligrosos
      (FLUSHALL, KEYS, CONFIG, etc.). #}
 user default off
-user admin on >{{ vault_redis_admin_password }} ~* &* +@all
-{% for servicio, clave in vault_redis_users.items() %}
+user admin on >{{ redis_admin_password }} ~* &* +@all
+{% for servicio, clave in redis_users.items() %}
 user {{ servicio | replace('_', '-') }} on >{{ clave }} ~{{ servicio | replace('_', '-') }}:* &{{ servicio | replace('_', '-') }}:* +@all -@dangerous
 {% endfor %}

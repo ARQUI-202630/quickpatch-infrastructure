@@ -30,7 +30,7 @@
         owner: "{{ deploy_user }}"
         mode: "0600"
       loop:
-        - { nombre: qa, ip: "{{ ip.vm2 }}" }
+        - { nombre: qa, ip: "{{ ip.vm2 }}" }   # API de k3s de QA (VM2, ADR-022)
         - { nombre: produccion, ip: "{{ ip.vm3 }}" }
       loop_control:
         label: "{{ item.nombre }}"
@@ -40,7 +40,7 @@
       ansible.builtin.lineinfile:
         path: /etc/hosts
         regexp: '\s{{ gateway_hosts.qa | regex_escape }}$'
-        line: "{{ ip.vm2 }} {{ gateway_hosts.qa }}"
+        line: "{{ ip.vm1 }} {{ gateway_hosts.qa }}"   # QA se alcanza por el proxy de VM1, como un usuario
 
     # deploy-panel.yml publica el panel de QA en VM2 por SSH con esta llave.
     - name: Carpeta .ssh del usuario de despliegue

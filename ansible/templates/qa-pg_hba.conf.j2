@@ -1,7 +1,0 @@
-local   all   postgres                    peer
-host    all   postgres   127.0.0.1/32     scram-sha-256
-# Los pods de k3s de QA (rango de pods y la IP de la VM)
-{% for db in postgres_databases %}
-host    db_{{ db }}   app_{{ db }}   {{ k3s_cluster_cidr }}    scram-sha-256
-host    db_{{ db }}   app_{{ db }}   {{ ansible_host }}/32     scram-sha-256
-{% endfor %}
