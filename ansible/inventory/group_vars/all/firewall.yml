@@ -13,8 +13,8 @@ firewall_by_host:
   vm1:
     - { port: 443, from: [any], comment: "HTTPS publico (unico punto de entrada)" }
     - { port: 3100, from: "{{ all_vms }}", comment: "Promtail -> Loki (observabilidad en VM1, ADR-022)" }
-  vm2:   # QA (ADR-015). Producción no acepta conexiones desde VM2: sus reglas solo admiten a VM3.
-    - { port: 443, from: "{{ team_networks + [ip.vm1] }}", comment: "Equipo y k6 (runner de VM1) -> QA" }
+  vm2:   # QA, aplicación (ADR-022): k3s de QA. Producción no acepta conexiones desde QA ni al revés.
+    - { port: 30080, from: ["{{ ip.vm1 }}"], comment: "Proxy de VM1 -> Traefik de QA (HTTP)" }
     - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s de QA" }
   vm3:
     - { port: 30080, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTP)" }
@@ -26,3 +26,9 @@ firewall_by_host:
   vm6:   # Producción, mensajería y almacenamiento (ADR-022). Kafka UI (8080) no se abre: se entra por túnel SSH.
     - { port: 9092, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Kafka" }
     - { port: 9000, from: ["{{ ip.vm3 }}", "{{ ip.vm4 }}"], comment: "Evidencias (VM3) y respaldo (VM4) -> Garage (S3)" }
+  vm5:   # QA, datos (ADR-022): solo el k3s de QA (VM2) puede entrar
+    - { port: 5432, from: ["{{ ip.vm2 }}"], comment: "Servicios de QA -> PostgreSQL" }
+    - { port: 6379, from: ["{{ ip.vm2 }}"], comment: "Servicios de QA -> Redis" }
+  vm7:   # QA, mensajería y almacenamiento (ADR-022): solo el k3s de QA (VM2) puede entrar
+    - { port: 9092, from: ["{{ ip.vm2 }}"], comment: "Servicios de QA -> Kafka" }
+    - { port: 9000, from: ["{{ ip.vm2 }}"], comment: "Evidencias de QA -> Garage (S3)" }

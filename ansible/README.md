@@ -67,11 +67,10 @@ Primero solo lectura, después en modo simulación y al final de verdad:
 | `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
 | `deploy-observabilidad.yml` | VM1 | Prometheus, Loki y Grafana de los dos ambientes (ADR-022); dashboards y alertas |
 | `deploy-garage.yml` | VM6 | Garage de producción (S3), con una llave por servicio; buckets y llaves de Garage |
-| `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
+| `deploy-db.yml` | VM4 y VM5 (QA) | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
 | `deploy-cache.yml` | VM4 | Redis con un usuario ACL por servicio, restringido a sus claves (tope de memoria `redis_maxmemory`) |
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
 | `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |
-| `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, Garage y Nginx, con secretos propios |
 | `deploy-gateway.yml` | VM1 | Nginx con HTTPS autofirmado: producción (`/api/` a VM3 y `/` al panel Angular), QA (VM2) y Grafana (VM7) |
 | `deploy-runner.yml` | VM1 | Runner self-hosted de la organización, kubeconfig de QA y producción, y k6 |
 
@@ -137,3 +136,16 @@ Kafka UI no tiene puerto abierto: `ssh -L 8080:10.43.99.12:8080 estudiante@10.43
 4. `./ap playbooks/migrar-adr-022.yml --tags redis-vm5 -e confirmar_borrado=true`: quita en VM5 el acceso de VM3 al 6379.
 
 Los servicios reciben su usuario y su contraseña en su propio `Secret` de Kubernetes (Documento de Infraestructura, 3.4).
+
+**Paso 5 — QA en VM2, VM5 y VM7:**
+
+Los playbooks de producción sirven también a QA: `deploy-db`, `deploy-cache`, `deploy-kafka`, `deploy-garage` y `deploy-k3s` eligen su grupo de producción y su grupo de QA, y lo que cambia (secretos, memoria, retención, capacidad) está en `inventory/group_vars/produccion.yml` y `qa.yml`. `deploy-qa.yml` ya no existe. Para aplicarlo solo a QA se usa `--limit qa`.
+
+1. `./ap playbooks/migrar-adr-022.yml --tags qa-vm2 -e confirmar_borrado=true`: quita el Nginx del QA anterior de VM2.
+2. `./ap playbooks/setup-base.yml`: firewall (VM2: 30080 y 6443 desde VM1; VM5: 5432 y 6379 desde VM2; VM7: 9092 y 9000 desde VM2).
+3. `./ap playbooks/deploy-garage.yml --limit qa`, `deploy-kafka.yml --limit qa`, `deploy-db.yml --limit qa` y `deploy-cache.yml --limit qa`: Garage y Kafka en VM7, PostgreSQL y Redis en VM5.
+4. `./ap playbooks/deploy-k3s.yml --limit qa`: k3s de QA en VM2.
+5. `./ap playbooks/deploy-gateway.yml` y `deploy-runner.yml`: el proxy de VM1 reenvía QA al Traefik de VM2 y el runner toma el kubeconfig nuevo.
+6. `./ap playbooks/migrar-adr-022.yml --tags qa-vm5 -e confirmar_borrado=true`: quita el k3s de QA de VM5.
+
+`qa.quickpatch.internal` entra por el proxy de VM1 al Traefik de VM2. Mientras no haya imágenes del gateway y del panel, `/` y `/api/` de QA responden 404.

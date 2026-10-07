@@ -16,6 +16,11 @@
 # Paso 3 (Redis con usuarios por servicio en VM4):
 #   --tags redis-vm5   quita en VM5 la regla que dejaba entrar a VM3 (producción) al 6379 de QA.
 #
+# Paso 5 (QA en VM2, VM5 y VM7):
+#   --tags qa-vm2      quita de VM2 el Nginx del QA anterior (y su carpeta) y las reglas del 443.
+#                      Correr antes de deploy-k3s.yml: el k3s de QA vuelve a VM2.
+#   --tags qa-vm5      quita de VM5 el k3s de QA y sus reglas, después de que PostgreSQL y Redis de QA corran en VM5.
+#
 #   --tags kafka-ui    cierra el 8080 de VM6 que abría el equipo hacia Kafka UI (sin login; se entra por túnel SSH).
 #                      setup-base.yml lo había vuelto a abrir mientras firewall.yml todavía lo traía.
 #   --tags garage-vm7  quita el Garage de producción de VM7 y sus reglas, después de que Garage corra en VM6 y el
@@ -202,3 +207,69 @@
         permanent: true
         immediate: true
         state: disabled
+
+- name: Quitar el Nginx del QA anterior de VM2
+  hosts: vm2
+  tags: [qa-vm2]
+  vars:
+    dir: "{{ stack_dir }}/qa"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe el QA anterior?
+      ansible.builtin.stat: { path: "{{ dir }}/compose.yml" }
+      register: qa_vm2
+    - name: Bajar el Nginx de QA
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: absent
+        remove_volumes: true
+      when: qa_vm2.stat.exists
+    - name: Borrar la carpeta del QA anterior
+      ansible.builtin.file: { path: "{{ dir }}", state: absent }
+    - name: Quitar las reglas del 443 (equipo y runner) hacia el Nginx de QA
+      ansible.posix.firewalld:
+        zone: quickpatch
+        rich_rule: 'rule family="ipv4" source address="{{ item }}" port port="443" protocol="tcp" accept'
+        permanent: true
+        immediate: true
+        state: disabled
+      loop: "{{ team_networks + [ip.vm1] }}"
+
+- name: Quitar el k3s de QA de VM5
+  hosts: vm5
+  tags: [qa-vm5]
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe el instalador de k3s?
+      ansible.builtin.stat: { path: /usr/local/bin/k3s-uninstall.sh }
+      register: k3s_vm5
+    - name: Desinstalar k3s de VM5
+      ansible.builtin.command: /usr/local/bin/k3s-uninstall.sh
+      when: k3s_vm5.stat.exists
+      changed_when: true
+    - name: Quitar las reglas del k3s de QA que estaba en VM5
+      ansible.posix.firewalld:
+        zone: quickpatch
+        rich_rule: 'rule family="ipv4" source address="{{ item.from }}" port port="{{ item.port }}" protocol="tcp" accept'
+        permanent: true
+        immediate: true
+        state: disabled
+      loop:
+        - { from: "{{ ip.vm2 }}", port: "30080" }
+        - { from: "{{ ip.vm1 }}", port: "6443" }
+      loop_control:
+        label: "{{ item.port }} desde {{ item.from }}"
+    - name: Quitar de la zona de confianza los rangos de pods y servicios de k3s
+      ansible.posix.firewalld:
+        zone: trusted
+        source: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: disabled
+      loop: ["{{ k3s_cluster_cidr }}", "{{ k3s_service_cidr }}"]

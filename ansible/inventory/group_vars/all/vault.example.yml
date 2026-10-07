@@ -15,7 +15,14 @@ vault_service_db_passwords:          # una por base de postgres_databases
 vault_redis_password: CAMBIAR   # en desuso desde el ADR-022 (usuarios ACL por servicio); se conserva hasta migrar QA
 vault_redis_admin_password: CAMBIAR   # usuario admin de Redis, solo para operación (no se entrega a ningún servicio)
 vault_redis_users:                    # un usuario de Redis por servicio, restringido a sus claves <servicio>:*
+  identity: CAMBIAR
+  actors: CAMBIAR
+  catalog: CAMBIAR
   service_request: CAMBIAR
+  matching: CAMBIAR
+  ranking: CAMBIAR
+  payments: CAMBIAR
+  communication: CAMBIAR
 # Garage (ADR-016). rpc_secret: 64 hex. Llaves: id = "GK" + 24 hex; secret = 64 hex.
 vault_garage_rpc_secret: CAMBIAR
 vault_garage_admin_token: CAMBIAR
@@ -30,6 +37,16 @@ vault_github_runner_token: CAMBIAR   # token de registro del runner, a nivel de 
 vault_qa_postgres_superuser_password: CAMBIAR
 vault_qa_service_db_password: CAMBIAR   # una sola para las bases de QA
 vault_qa_redis_password: CAMBIAR
+vault_qa_redis_admin_password: CAMBIAR
+vault_qa_redis_users:                 # igual que vault_redis_users, con valores distintos a los de producción
+  identity: CAMBIAR
+  actors: CAMBIAR
+  catalog: CAMBIAR
+  service_request: CAMBIAR
+  matching: CAMBIAR
+  ranking: CAMBIAR
+  payments: CAMBIAR
+  communication: CAMBIAR
 vault_qa_garage_rpc_secret: CAMBIAR
 vault_qa_garage_admin_token: CAMBIAR
 vault_qa_garage_keys:

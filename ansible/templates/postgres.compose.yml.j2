@@ -3,8 +3,9 @@ services:
     image: {{ images.postgis }}
     network_mode: host
     restart: unless-stopped
-    environment:
-      POSTGRES_PASSWORD: "{{ vault_postgres_superuser_password }}"
+{% if ansible_os_family == 'RedHat' %}    security_opt: [label=disable]   # SELinux: leer la configuración montada
+{% endif %}    environment:
+      POSTGRES_PASSWORD: "{{ pg_superuser_password }}"
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     command:
       - postgres

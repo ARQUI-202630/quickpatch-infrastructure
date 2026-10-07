@@ -1,0 +1,30 @@
+# Variables del ambiente de producción (ADR-022): VM3, VM4 y VM6. Los playbooks usan estos nombres genéricos;
+# group_vars/qa.yml define los mismos con los valores de QA.
+entorno: produccion
+kubeconfig_name: produccion
+
+# PostgreSQL (VM4): cada base con su rol; solo VM3 (k3s) puede conectarse.
+pg_superuser_password: "{{ vault_postgres_superuser_password }}"
+pg_service_passwords: "{{ vault_service_db_passwords }}"
+pg_client_ip: "{{ ip.vm3 }}"
+pg_respaldo: true            # respaldo diario de PostgreSQL al Garage de VM6
+
+# Redis (VM4): comparte VM con PostgreSQL. El tope se revisa con la medición de RAM (SCRUM-347).
+redis_admin_password: "{{ vault_redis_admin_password }}"
+redis_users: "{{ vault_redis_users }}"
+redis_maxmemory: 1gb
+
+# Kafka (VM6)
+kafka_heap: "-Xms1g -Xmx2g"
+kafka_retencion_horas: 168
+
+# Garage (VM6): una llave por uso, con permiso solo sobre sus buckets
+garage_capacidad: 30G
+garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
+garage_admin_token: "{{ vault_garage_admin_token }}"
+garage_llaves:
+  service-request: "{{ vault_garage_keys.service_request }}"
+  backups: "{{ vault_garage_keys.backups }}"
+garage_permisos:
+  - { bucket: service-request-evidencias, llave: service-request }
+  - { bucket: backups-postgres, llave: backups }

@@ -1,20 +1,12 @@
-# Garage (S3: evidencias y respaldos de PostgreSQL, ADR-016) de producción en VM6, con Kafka (ADR-022).
+# Garage (S3: evidencias y respaldos de PostgreSQL, ADR-016) de producción (VM6) y de QA (VM7), con el mismo
+# playbook (ADR-022). La capacidad, los secretos, las llaves y los permisos de cada ambiente están en group_vars.
 # Una llave por uso, con permiso solo sobre sus buckets: `service-request` para las evidencias y `backups` para
 # el respaldo diario de PostgreSQL. Reemplazan a la llave compartida `servicios`.
-- name: Garage de producción (VM6)
-  hosts: storage
+- name: Garage
+  hosts: storage:qa_mensajeria
   vars:
     dir: "{{ stack_dir }}/garage"
     garage_compose_dir: "{{ dir }}"
-    garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
-    garage_admin_token: "{{ vault_garage_admin_token }}"
-    garage_capacidad: 30G
-    garage_llaves:
-      service-request: "{{ vault_garage_keys.service_request }}"
-      backups: "{{ vault_garage_keys.backups }}"
-    garage_permisos:
-      - { bucket: service-request-evidencias, llave: service-request }
-      - { bucket: backups-postgres, llave: backups }
   tasks:
     - name: Carpeta
       ansible.builtin.file: { path: "{{ dir }}", state: directory, mode: "0755" }

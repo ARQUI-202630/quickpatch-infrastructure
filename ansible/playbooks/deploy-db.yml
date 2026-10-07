@@ -1,6 +1,7 @@
-# VM4: PostgreSQL + PostGIS (secciones 5.2, 5.7 y 9.2).
+# PostgreSQL + PostGIS (secciones 5.2, 5.7 y 9.2) de producción (VM4) y de QA (VM5), con el mismo playbook (ADR-022).
+# Lo que cambia entre ambientes está en group_vars/produccion.yml y group_vars/qa.yml.
 - name: Base de datos
-  hosts: database
+  hosts: database:qa_datos
   vars:
     dir: "{{ stack_dir }}/postgres"
   tasks:
@@ -22,7 +23,7 @@
         owner: "999"
         mode: "0600"
 
-    - name: Acceso solo desde VM3, cada rol a su propia base
+    - name: Acceso solo desde el k3s del ambiente, cada rol a su propia base
       ansible.builtin.template:
         src: ../templates/pg_hba.conf.j2
         dest: "{{ dir }}/pg_hba.conf"
@@ -51,11 +52,13 @@
       changed_when: "'already exists' not in postgis.stdout"
       loop: "{{ postgis_databases }}"
 
+    # Solo producción: QA no tiene respaldo (sus datos son de prueba).
     - name: Script de respaldo diario a Garage en VM6 (sección 9.2)
       ansible.builtin.template:
         src: ../templates/pg-backup.sh.j2
         dest: /usr/local/bin/quickpatch-pg-backup
         mode: "0750"
+      when: pg_respaldo | bool
 
     - name: Respaldo diario a las 2:00
       ansible.builtin.cron:
@@ -63,6 +66,7 @@
         hour: "2"
         minute: "0"
         job: /usr/local/bin/quickpatch-pg-backup >> /var/log/quickpatch-pg-backup.log 2>&1
+      when: pg_respaldo | bool
 
   handlers:
     - name: Reiniciar PostgreSQL
