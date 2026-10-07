@@ -125,6 +125,6 @@ Prometheus (9090) y Grafana (3000) no tienen puerto abierto en el firewall: se l
 2. `./ap playbooks/setup-base.yml`: firewall de VM6 (9092 y 9000 desde VM3; 9000 también desde VM4).
 3. `./ap playbooks/deploy-kafka.yml` y `./ap playbooks/deploy-garage.yml`: Kafka con su UI y Garage en VM6, con las llaves `service-request` y `backups` y los buckets `service-request-evidencias` y `backups-postgres`.
 4. `./ap playbooks/deploy-db.yml`: el respaldo diario de VM4 apunta a VM6. Se prueba corriéndolo una vez a mano.
-5. `./ap playbooks/migrar-adr-022.yml --tags kafka-vm4,garage-vm7 -e confirmar_borrado=true`: quita Kafka de VM4 y Garage de VM7.
+5. `./ap playbooks/migrar-adr-022.yml --tags kafka-vm4,garage-vm7,kafka-ui -e confirmar_borrado=true`: quita Kafka de VM4, Garage de VM7 y cierra el 8080 de Kafka UI en VM6.
 
 Kafka UI no tiene puerto abierto: `ssh -L 8080:10.43.99.12:8080 estudiante@10.43.99.12` y luego `http://localhost:8080`.

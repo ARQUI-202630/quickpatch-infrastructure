@@ -12,6 +12,8 @@
 #   --tags qa-vm6      vacía el QA que quedó en VM6 (PostgreSQL, Redis, Kafka y Garage de QA) y sus reglas.
 #                      Correr ANTES de deploy-kafka.yml y deploy-garage.yml: usan los mismos puertos (9092 y 9000).
 #   --tags kafka-vm4   quita el Kafka que quedó en VM4 y su regla, después de que Kafka corra en VM6.
+#   --tags kafka-ui    cierra el 8080 de VM6 que abría el equipo hacia Kafka UI (sin login; se entra por túnel SSH).
+#                      setup-base.yml lo había vuelto a abrir mientras firewall.yml todavía lo traía.
 #   --tags garage-vm7  quita el Garage de producción de VM7 y sus reglas, después de que Garage corra en VM6 y el
 #                      respaldo de VM4 apunte a VM6.
 - name: Quitar la observabilidad vieja de VM7
@@ -163,3 +165,20 @@
         from_ip: "{{ item }}"
         delete: true
       loop: ["{{ ip.vm3 }}", "{{ ip.vm4 }}"]
+
+- name: Cerrar el 8080 de Kafka UI en VM6
+  hosts: vm6
+  tags: [kafka-ui]
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: Quitar la regla del equipo hacia Kafka UI
+      community.general.ufw:
+        rule: allow
+        port: "8080"
+        proto: tcp
+        from_ip: "{{ item }}"
+        delete: true
+      loop: "{{ team_networks }}"
