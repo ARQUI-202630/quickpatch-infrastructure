@@ -1,17 +1,19 @@
-# Garage (S3: evidencias y respaldos de PostgreSQL, ADR-016) en la VM de mensajería y almacenamiento (ADR-022).
-# Hoy corre en VM7; en el paso 2 de la migración pasa a VM6 (producción) y VM7 queda para QA.
-# remove_orphans quita de VM7 los contenedores de Prometheus, Loki y Grafana, que ahora viven en VM1.
-- name: Garage
-  hosts: storage_observability
+# Garage (S3: evidencias y respaldos de PostgreSQL, ADR-016) de producción en VM6, con Kafka (ADR-022).
+# Una llave por uso, con permiso solo sobre sus buckets: `service-request` para las evidencias y `backups` para
+# el respaldo diario de PostgreSQL. Reemplazan a la llave compartida `servicios`.
+- name: Garage de producción (VM6)
+  hosts: storage
   vars:
-    dir: "{{ stack_dir }}/observabilidad"
+    dir: "{{ stack_dir }}/garage"
     garage_compose_dir: "{{ dir }}"
     garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
     garage_admin_token: "{{ vault_garage_admin_token }}"
     garage_capacidad: 30G
-    garage_llaves: "{{ vault_garage_keys }}"
+    garage_llaves:
+      service-request: "{{ vault_garage_keys.service_request }}"
+      backups: "{{ vault_garage_keys.backups }}"
     garage_permisos:
-      - { bucket: evidencias, llave: servicios }
+      - { bucket: service-request-evidencias, llave: service-request }
       - { bucket: backups-postgres, llave: backups }
   tasks:
     - name: Carpeta
@@ -31,7 +33,6 @@
       community.docker.docker_compose_v2:
         project_src: "{{ dir }}"
         state: present
-        remove_orphans: true
 
     - name: Layout, llaves y buckets de Garage
       ansible.builtin.include_tasks: ../tasks/garage.yml

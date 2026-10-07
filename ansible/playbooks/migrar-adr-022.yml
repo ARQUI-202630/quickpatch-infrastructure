@@ -7,8 +7,15 @@
 #   --tags obs-vm7   quita Prometheus, Loki y Grafana viejos de VM7 y sus reglas (3100, 3000 y 9090).
 #                    Correr después de deploy-garage.yml, que saca esos contenedores de VM7.
 #   --tags fw-9100   quita en las 7 VMs la regla vieja que dejaba a VM7 leer node_exporter (ahora lee VM1).
+#
+# Paso 2 (Garage y Kafka de producción en VM6):
+#   --tags qa-vm6      vacía el QA que quedó en VM6 (PostgreSQL, Redis, Kafka y Garage de QA) y sus reglas.
+#                      Correr ANTES de deploy-kafka.yml y deploy-garage.yml: usan los mismos puertos (9092 y 9000).
+#   --tags kafka-vm4   quita el Kafka que quedó en VM4 y su regla, después de que Kafka corra en VM6.
+#   --tags garage-vm7  quita el Garage de producción de VM7 y sus reglas, después de que Garage corra en VM6 y el
+#                      respaldo de VM4 apunte a VM6.
 - name: Quitar la observabilidad vieja de VM7
-  hosts: storage_observability
+  hosts: vm7
   tags: [obs-vm7]
   vars:
     dir: "{{ stack_dir }}/observabilidad"
@@ -67,3 +74,92 @@
         immediate: true
         state: disabled
       when: ansible_os_family == 'RedHat'
+
+- name: Vaciar el QA que quedó en VM6
+  hosts: vm6
+  tags: [qa-vm6]
+  vars:
+    dir: "{{ stack_dir }}/qa"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe el QA anterior?
+      ansible.builtin.stat: { path: "{{ dir }}/compose.yml" }
+      register: qa_viejo
+    - name: Bajar PostgreSQL, Redis, Kafka y Garage de QA y borrar sus volúmenes
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: absent
+        remove_volumes: true
+      when: qa_viejo.stat.exists
+    - name: Borrar la carpeta del QA anterior
+      ansible.builtin.file: { path: "{{ dir }}", state: absent }
+    - name: Quitar las reglas de VM5 hacia los datos de QA de VM6
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        from_ip: "{{ ip.vm5 }}"
+        delete: true
+      loop: ["5432", "6379", "9092", "9000"]
+
+- name: Quitar Kafka de VM4
+  hosts: vm4
+  tags: [kafka-vm4]
+  vars:
+    dir: "{{ stack_dir }}/kafka"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe Kafka en VM4?
+      ansible.builtin.stat: { path: "{{ dir }}/compose.yml" }
+      register: kafka_vm4
+    - name: Bajar Kafka y Kafka UI y borrar sus volúmenes
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: absent
+        remove_volumes: true
+      when: kafka_vm4.stat.exists
+    - name: Borrar la carpeta de Kafka
+      ansible.builtin.file: { path: "{{ dir }}", state: absent }
+    - name: Quitar la regla de VM3 hacia el Kafka de VM4
+      community.general.ufw:
+        rule: allow
+        port: "9092"
+        proto: tcp
+        from_ip: "{{ ip.vm3 }}"
+        delete: true
+
+- name: Quitar el Garage de producción de VM7
+  hosts: vm7
+  tags: [garage-vm7]
+  vars:
+    dir: "{{ stack_dir }}/observabilidad"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: ¿Existe Garage en VM7?
+      ansible.builtin.stat: { path: "{{ dir }}/compose.yml" }
+      register: garage_vm7
+    - name: Bajar Garage y borrar sus volúmenes
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: absent
+        remove_volumes: true
+      when: garage_vm7.stat.exists
+    - name: Borrar la carpeta de Garage
+      ansible.builtin.file: { path: "{{ dir }}", state: absent }
+    - name: Quitar de VM7 las reglas del 9000 para VM3 y VM4
+      community.general.ufw:
+        rule: allow
+        port: "9000"
+        proto: tcp
+        from_ip: "{{ item }}"
+        delete: true
+      loop: ["{{ ip.vm3 }}", "{{ ip.vm4 }}"]

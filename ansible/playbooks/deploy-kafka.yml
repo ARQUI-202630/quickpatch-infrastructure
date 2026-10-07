@@ -1,4 +1,6 @@
-# VM6: Apache Kafka en modo KRaft (sin ZooKeeper) + Kafka UI (sección 5.2).
+# VM6: Apache Kafka en modo KRaft (sin ZooKeeper) + Kafka UI de producción (ADR-022, sección 5.2).
+# Kafka UI escucha en la IP de la VM pero el firewall no abre el 8080: se entra por túnel SSH
+# (ssh -L 8080:<IP de VM6>:8080 estudiante@<IP de VM6>).
 - name: Mensajería
   hosts: messaging
   vars:

@@ -15,7 +15,7 @@ AWS=(docker run --rm --network host -v "{{ stack_dir }}/postgres/backups:/backup
   -e AWS_ACCESS_KEY_ID="{{ vault_garage_keys.backups.id }}"
   -e AWS_SECRET_ACCESS_KEY="{{ vault_garage_keys.backups.secret }}"
   -e AWS_DEFAULT_REGION="{{ garage_region }}"
-  {{ images.aws_cli }} --endpoint-url "http://{{ ip.vm7 }}:9000")
+  {{ images.aws_cli }} --endpoint-url "http://{{ ip.vm6 }}:9000")
 "${AWS[@]}" s3 sync "/backups/$FECHA" "s3://backups-postgres/$FECHA/" --only-show-errors
 LIMITE=$(date -d "-{{ backup_retention_days }} days" +%Y-%m-%d)
 for dia in $("${AWS[@]}" s3 ls s3://backups-postgres/ | awk '/PRE/ {print $2}' | tr -d /); do
