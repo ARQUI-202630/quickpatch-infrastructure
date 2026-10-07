@@ -1,8 +1,9 @@
-# Usuarios de Redis (ADR-022, Documento de Infraestructura 3.4). Lo genera Ansible: no editar a mano.
-# - default: apagado. Ya no existe una contraseña única compartida.
-# - admin: solo para operación; ningún servicio lo recibe.
-# - un usuario por servicio, restringido a sus claves y canales <servicio>:* y sin comandos peligrosos
-#   (FLUSHALL, KEYS, CONFIG, etc.).
+{# Usuarios de Redis (ADR-022, Documento de Infraestructura 3.4). Lo genera Ansible: no editar a mano.
+   Redis NO admite líneas de comentario en el archivo ACL: esta explicación va en comentarios de Jinja.
+   - default: apagado. Ya no existe una contraseña única compartida.
+   - admin: solo para operación; ningún servicio lo recibe.
+   - un usuario por servicio, restringido a sus claves y canales <servicio>:* y sin comandos peligrosos
+     (FLUSHALL, KEYS, CONFIG, etc.). #}
 user default off
 user admin on >{{ vault_redis_admin_password }} ~* &* +@all
 {% for servicio, clave in vault_redis_users.items() %}
