@@ -66,7 +66,7 @@ Primero solo lectura, después en modo simulación y al final de verdad:
 | `diagnostico.yml` | Todas | Solo lectura: sistema, recursos, Docker y ufw |
 | `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
 | `deploy-observabilidad.yml` | VM1 | Prometheus, Loki y Grafana de los dos ambientes (ADR-022); dashboards y alertas |
-| `deploy-garage.yml` | VM7 (pasa a VM6) | Garage (S3); buckets y llaves de Garage |
+| `deploy-garage.yml` | VM6 | Garage de producción (S3), con una llave por servicio; buckets y llaves de Garage |
 | `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
 | `deploy-cache.yml` | VM5 | Redis con contraseña |
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
@@ -118,3 +118,13 @@ Rige el reparto del ADR-022 (revisión del profesor): VM1 herramientas, producci
 7. `./ap playbooks/migrar-adr-022.yml --tags obs-vm7,fw-9100 -e confirmar_borrado=true`: quita lo viejo (volúmenes, configuración y reglas de firewall).
 
 Prometheus (9090) y Grafana (3000) no tienen puerto abierto en el firewall: se llega a Grafana por el Nginx de VM1 (`grafana.quickpatch.internal`), o con un túnel SSH a VM1 si el proxy falla.
+
+**Paso 2 — Garage y Kafka de producción en VM6:**
+
+1. `./ap playbooks/migrar-adr-022.yml --tags qa-vm6 -e confirmar_borrado=true`: vacía el QA que estaba en VM6 (usa los mismos puertos 9092 y 9000).
+2. `./ap playbooks/setup-base.yml`: firewall de VM6 (9092 y 9000 desde VM3; 9000 también desde VM4).
+3. `./ap playbooks/deploy-kafka.yml` y `./ap playbooks/deploy-garage.yml`: Kafka con su UI y Garage en VM6, con las llaves `service-request` y `backups` y los buckets `service-request-evidencias` y `backups-postgres`.
+4. `./ap playbooks/deploy-db.yml`: el respaldo diario de VM4 apunta a VM6. Se prueba corriéndolo una vez a mano.
+5. `./ap playbooks/migrar-adr-022.yml --tags kafka-vm4,garage-vm7,kafka-ui -e confirmar_borrado=true`: quita Kafka de VM4, Garage de VM7 y cierra el 8080 de Kafka UI en VM6.
+
+Kafka UI no tiene puerto abierto: `ssh -L 8080:10.43.99.12:8080 estudiante@10.43.99.12` y luego `http://localhost:8080`.
