@@ -115,7 +115,7 @@ Se hace una sola vez, por fases y **en este orden**, porque VM5 y VM6 eran produ
 
 1. `./ap playbooks/setup-base.yml --check --diff` y luego sin `--check`: firewall nuevo en las 7 VMs.
 2. Producción: `deploy-db.yml`, `deploy-cache.yml` y `deploy-kafka.yml` (los tres ahora en VM4).
-3. `./ap playbooks/migrar-reparto-vms.yml --tags vm5,vm6 -e confirmar_borrado=true`: quita el Redis de VM5 y el Kafka de VM6 (QA usa el mismo puerto 9092).
+3. `./ap playbooks/migrar-reparto-vms.yml --tags vm5,vm6 -e confirmar_borrado=true`: quita el Redis de VM5 y el Kafka de VM6 (QA usa el mismo puerto 9092), y las reglas de firewall viejas (entre ellas la que dejaba a VM3 entrar al Kafka de VM6).
 4. `./ap playbooks/deploy-qa.yml`: datos (VM6), k3s (VM5) y entrada (VM2). Después `deploy-runner.yml`, para que el runner tome el kubeconfig de QA nuevo (ahora apunta a VM5).
 5. `./ap playbooks/migrar-reparto-vms.yml --tags vm2 -e confirmar_borrado=true`: quita el k3s y los volúmenes del QA anterior de VM2.
 

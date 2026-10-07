@@ -1,5 +1,6 @@
 # Limpieza ÚNICA tras el reparto de VMs del ADR-021. DESTRUCTIVA: borra contenedores, volúmenes y k3s
-# del reparto anterior (todos estaban vacíos: no había servicios ni datos).
+# del reparto anterior (todos estaban vacíos: no había servicios ni datos), y las reglas de firewall que
+# setup-base.yml no quita porque solo agrega (si no, producción seguiría pudiendo llegar al Kafka de QA).
 #
 # Hay que correrla por fases, en este orden, y solo con -e confirmar_borrado=true:
 #   1. Desplegar los datos de producción en VM4 (deploy-db, deploy-cache y deploy-kafka).
@@ -28,6 +29,13 @@
       when: redis_viejo.stat.exists
     - name: Borrar la carpeta de Redis
       ansible.builtin.file: { path: "{{ dir }}", state: absent }
+    - name: Quitar la regla del firewall que dejaba entrar a VM3 al Redis de VM5
+      ansible.posix.firewalld:
+        zone: quickpatch
+        rich_rule: 'rule family="ipv4" source address="{{ ip.vm3 }}" port port="6379" protocol="tcp" accept'
+        permanent: true
+        immediate: true
+        state: disabled
 
 - name: Quitar el Kafka de producción de VM6
   hosts: qa_datos
@@ -50,6 +58,21 @@
       when: kafka_viejo.stat.exists
     - name: Borrar la carpeta de Kafka
       ansible.builtin.file: { path: "{{ dir }}", state: absent }
+    - name: Quitar la regla que dejaba entrar a los microservicios de producción (VM3) al Kafka de VM6
+      community.general.ufw:
+        rule: allow
+        port: "9092"
+        proto: tcp
+        from_ip: "{{ ip.vm3 }}"
+        delete: true
+    - name: Quitar la regla del equipo hacia el Kafka UI de VM6
+      community.general.ufw:
+        rule: allow
+        port: "8080"
+        proto: tcp
+        from_ip: "{{ item }}"
+        delete: true
+      loop: "{{ team_networks }}"
 
 - name: Quitar el k3s y los datos del QA anterior de VM2
   hosts: qa_entrada
@@ -68,13 +91,21 @@
       ansible.builtin.command: /usr/local/bin/k3s-uninstall.sh
       when: k3s_viejo.stat.exists
       changed_when: true
+    # Con la CLI de Docker (--force no falla si el volumen ya no existe): el módulo docker_volume pide
+    # la librería Python de Docker, que estas VMs no tienen.
     - name: Borrar los volúmenes del QA anterior
-      community.docker.docker_volume:
-        name: "qa_{{ item }}"
-        state: absent
+      ansible.builtin.command: docker volume rm --force qa_{{ item }}
       loop: [pgdata, kafka-data, garage-meta, garage-data]
+      changed_when: true
     - name: Borrar la configuración del QA anterior
       ansible.builtin.file:
         path: "{{ dir }}/{{ item }}"
         state: absent
       loop: [init, pg_hba.conf, garage.toml]
+    - name: Quitar la regla del runner hacia la API de k3s de VM2
+      ansible.posix.firewalld:
+        zone: quickpatch
+        rich_rule: 'rule family="ipv4" source address="{{ ip.vm1 }}" port port="6443" protocol="tcp" accept'
+        permanent: true
+        immediate: true
+        state: disabled
