@@ -1,5 +1,5 @@
 # Instalación de k3s de un nodo. La usan VM3 (producción) y VM2 (QA).
-# Rangos de red fuera de 10.43.0.0/16 (red del laboratorio) y Traefik en NodePort 30080/30443.
+# Rangos de red fuera de 10.43.0.0/16 (red del laboratorio) y Traefik en la red del host, puertos 30080 y 30443.
 - name: Tráfico interno de k3s permitido en ufw (pods y servicios)
   community.general.ufw:
     rule: allow
@@ -24,7 +24,15 @@
     state: directory
     mode: "0700"
 
-- name: Configuración de Traefik como NodePort
+# Traefik escucha directamente en el 30080 y el 30443 del host (hostNetwork) y NO como NodePort.
+# Un NodePort lo atiende kube-proxy con reglas de NAT que se evalúan antes que las de ufw y firewalld:
+# cualquier VM llegaba a ese puerto aunque el firewall solo permitiera a VM1 (se comprobó el 7 de octubre
+# de 2026 en VM2 y VM3). Con la red del host, el tráfico pasa por el firewall como el de cualquier otro
+# servicio, igual que los contenedores de Docker del proyecto.
+# - service ClusterIP: sin NodePort, kube-proxy no abre el 30080 ni el 30443.
+# - metrics 9101: el 9100 es de node_exporter en el host y chocaría.
+# - maxSurge 0: dos pods de Traefik no pueden compartir los puertos del host durante una actualización.
+- name: Configuración de Traefik en la red del host (sin NodePort)
   ansible.builtin.copy:
     dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
     mode: "0600"
@@ -36,13 +44,21 @@
         namespace: kube-system
       spec:
         valuesContent: |-
+          hostNetwork: true
           service:
-            type: NodePort
+            type: ClusterIP
+          updateStrategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 1
+              maxSurge: 0
           ports:
             web:
-              nodePort: 30080
+              port: 30080
             websecure:
-              nodePort: 30443
+              port: 30443
+            metrics:
+              port: 9101
 
 # raw.githubusercontent.com está bloqueado en la red de la universidad, y get.k3s.io
 # rechaza clientes que no se identifican como curl. La versión se fija con INSTALL_K3S_VERSION.
