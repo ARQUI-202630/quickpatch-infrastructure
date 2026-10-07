@@ -1,0 +1,43 @@
+# Garage (S3: evidencias y respaldos de PostgreSQL, ADR-016) en la VM de mensajería y almacenamiento (ADR-022).
+# Hoy corre en VM7; en el paso 2 de la migración pasa a VM6 (producción) y VM7 queda para QA.
+# remove_orphans quita de VM7 los contenedores de Prometheus, Loki y Grafana, que ahora viven en VM1.
+- name: Garage
+  hosts: storage_observability
+  vars:
+    dir: "{{ stack_dir }}/observabilidad"
+    garage_compose_dir: "{{ dir }}"
+    garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
+    garage_admin_token: "{{ vault_garage_admin_token }}"
+    garage_capacidad: 30G
+    garage_llaves: "{{ vault_garage_keys }}"
+    garage_permisos:
+      - { bucket: evidencias, llave: servicios }
+      - { bucket: backups-postgres, llave: backups }
+  tasks:
+    - name: Carpeta
+      ansible.builtin.file: { path: "{{ dir }}", state: directory, mode: "0755" }
+
+    - name: Configuración de Garage (lleva secretos)
+      ansible.builtin.template:
+        src: "../templates/{{ item.src }}"
+        dest: "{{ dir }}/{{ item.dest }}"
+        mode: "0600"
+      loop:
+        - { src: garage.toml.j2, dest: garage.toml }
+        - { src: garage.compose.yml.j2, dest: compose.yml }
+      notify: Reiniciar Garage
+
+    - name: Levantar Garage
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: present
+        remove_orphans: true
+
+    - name: Layout, llaves y buckets de Garage
+      ansible.builtin.include_tasks: ../tasks/garage.yml
+
+  handlers:
+    - name: Reiniciar Garage
+      community.docker.docker_compose_v2:
+        project_src: "{{ dir }}"
+        state: restarted

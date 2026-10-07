@@ -65,7 +65,8 @@ Primero solo lectura, después en modo simulación y al final de verdad:
 |---|---|---|
 | `diagnostico.yml` | Todas | Solo lectura: sistema, recursos, Docker y ufw |
 | `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
-| `deploy-storage-observability.yml` | VM7 | Garage (S3), Prometheus, Loki y Grafana; buckets y llaves de Garage |
+| `deploy-observabilidad.yml` | VM1 | Prometheus, Loki y Grafana de los dos ambientes (ADR-022); dashboards y alertas |
+| `deploy-garage.yml` | VM7 (pasa a VM6) | Garage (S3); buckets y llaves de Garage |
 | `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
 | `deploy-cache.yml` | VM5 | Redis con contraseña |
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
@@ -101,3 +102,19 @@ El certificado es autofirmado: el navegador muestra una advertencia la primera v
 - **QA no puede llegar a producción:** PostgreSQL, Redis, Kafka y Garage de producción solo aceptan conexiones desde VM3 (y Garage, también desde VM4 para el respaldo).
 - **Garage con una llave por uso:** `servicios` solo accede a `evidencias` y `backups` solo a `backups-postgres`. Las llaves se definen en el vault y el playbook las importa (`tasks/garage.yml`).
 - **En VM2 y VM3, `ufw` permite el tráfico interno de k3s** (rangos de pods y servicios); sin eso los pods no se comunican.
+
+## Migración al reparto del ADR-022
+
+Rige el reparto del ADR-022 (revisión del profesor): VM1 herramientas, producción en VM3, VM4 y VM6, y QA en VM2, VM5 y VM7. Se migra por pasos y se comprueba cada uno antes del siguiente.
+
+**Paso 1 — Observabilidad a VM1** (este orden evita dejar producción sin monitoreo ni respaldo):
+
+1. `./ap playbooks/setup-base.yml --limit vm1`: abre el 3100 de VM1 a las 7 VMs.
+2. `./ap playbooks/deploy-observabilidad.yml`: Prometheus, Loki y Grafana en VM1, con los dashboards y las alertas.
+3. `./ap playbooks/setup-base.yml`: las 7 VMs mandan logs a VM1 y dejan que VM1 lea `node_exporter`.
+4. `./ap playbooks/deploy-gateway.yml`: el Nginx de VM1 apunta a su propio Grafana.
+5. Comprobar en Grafana que llegan métricas y logs de las 7 VMs.
+6. `./ap playbooks/deploy-garage.yml`: VM7 queda solo con Garage (quita los contenedores de observabilidad).
+7. `./ap playbooks/migrar-adr-022.yml --tags obs-vm7,fw-9100 -e confirmar_borrado=true`: quita lo viejo (volúmenes, configuración y reglas de firewall).
+
+Prometheus (9090) y Grafana (3000) no tienen puerto abierto en el firewall: se llega a Grafana por el Nginx de VM1 (`grafana.quickpatch.internal`), o con un túnel SSH a VM1 si el proxy falla.

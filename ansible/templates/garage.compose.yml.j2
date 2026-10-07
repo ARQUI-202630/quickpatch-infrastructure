@@ -1,0 +1,15 @@
+# Garage (S3) en una VM de mensajería y almacenamiento (ADR-016, ADR-022). Red de host: ufw controla el 9000.
+services:
+  garage:
+    image: {{ images.garage }}
+    network_mode: host
+    restart: unless-stopped
+{% if ansible_os_family == 'RedHat' %}    security_opt: [label=disable]   # SELinux: leer la configuración montada
+{% endif %}    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+
+volumes:
+  garage-meta:
+  garage-data:

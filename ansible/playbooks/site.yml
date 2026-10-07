@@ -1,10 +1,13 @@
 # Orden completo (sección 5.4). Producción: VM1 y VM3 a VM7. QA: VM2 (ADR-015).
-# Storage y observabilidad va antes que la base de datos porque el respaldo escribe en Garage.
+# La observabilidad va primero para que las demás VMs tengan a dónde mandar logs y métricas, y Garage antes
+# que la base de datos porque el respaldo escribe en Garage.
 # k3s de producción y QA van antes que el runner, que necesita sus kubeconfig.
 - name: Configuración base de las VMs
   ansible.builtin.import_playbook: setup-base.yml
-- name: Almacenamiento y observabilidad (VM7)
-  ansible.builtin.import_playbook: deploy-storage-observability.yml
+- name: Observabilidad (VM1)
+  ansible.builtin.import_playbook: deploy-observabilidad.yml
+- name: Almacenamiento (Garage)
+  ansible.builtin.import_playbook: deploy-garage.yml
 - name: Base de datos (VM4)
   ansible.builtin.import_playbook: deploy-db.yml
 - name: Cache (VM5)
