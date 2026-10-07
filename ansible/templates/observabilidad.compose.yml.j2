@@ -1,14 +1,6 @@
-# Red de host: ufw controla los puertos 9000 (S3 de Garage), 3100, 3000 y 9090.
+# Observabilidad de los dos ambientes en VM1 (ADR-022). Red de host: ufw solo abre el 3100 (logs de las 7 VMs);
+# Grafana (3000) y Prometheus (9090) escuchan en la IP de VM1 y solo los alcanza el Nginx de VM1 y Grafana.
 services:
-  garage:
-    image: {{ images.garage }}
-    network_mode: host
-    restart: unless-stopped
-    volumes:
-      - ./garage.toml:/etc/garage.toml:ro
-      - garage-meta:/var/lib/garage/meta
-      - garage-data:/var/lib/garage/data
-
   prometheus:
     image: {{ images.prometheus }}
     network_mode: host
@@ -52,8 +44,6 @@ services:
       - grafana-data:/var/lib/grafana
 
 volumes:
-  garage-meta:
-  garage-data:
   prometheus-data:
   loki-data:
   grafana-data:

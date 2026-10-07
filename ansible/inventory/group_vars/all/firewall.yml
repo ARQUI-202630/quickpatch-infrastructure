@@ -5,13 +5,14 @@
 all_vms: "{{ ip.values() | list }}"
 
 firewall_common:
-  - { port: 9100, from: ["{{ ip.vm7 }}"], comment: "Prometheus -> node_exporter" }
+  - { port: 9100, from: ["{{ ip.vm1 }}"], comment: "Prometheus (VM1) -> node_exporter" }
   - { port: 3389, from: "{{ team_networks }}", comment: "Escritorio remoto (xrdp) del equipo" }
   - { port: 10050, from: "{{ lab_networks }}", comment: "Agente Zabbix del laboratorio" }
 
 firewall_by_host:
   vm1:
     - { port: 443, from: [any], comment: "HTTPS publico (unico punto de entrada)" }
+    - { port: 3100, from: "{{ all_vms }}", comment: "Promtail -> Loki (observabilidad en VM1, ADR-022)" }
   vm2:   # QA (ADR-015). Producción no acepta conexiones desde VM2: sus reglas solo admiten a VM3.
     - { port: 443, from: "{{ team_networks + [ip.vm1] }}", comment: "Equipo y k6 (runner de VM1) -> QA" }
     - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s de QA" }
@@ -28,6 +29,3 @@ firewall_by_host:
     - { port: 8080, from: "{{ team_networks }}", comment: "Equipo -> Kafka UI" }
   vm7:
     - { port: 9000, from: ["{{ ip.vm3 }}", "{{ ip.vm4 }}"], comment: "Evidencias y backup -> Garage (S3)" }
-    - { port: 3100, from: "{{ all_vms }}", comment: "Promtail -> Loki" }
-    - { port: 3000, from: "{{ team_networks }}", comment: "Equipo -> Grafana" }
-    - { port: 9090, from: "{{ team_networks }}", comment: "Equipo -> Prometheus" }

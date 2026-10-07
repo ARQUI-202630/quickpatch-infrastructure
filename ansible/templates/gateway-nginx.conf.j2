@@ -66,7 +66,7 @@ http {
     deny all;
 
     location / {
-      proxy_pass http://{{ ip.vm7 }}:3000;
+      proxy_pass http://{{ ip.vm1 }}:3000;   # Grafana, en la propia VM1 (ADR-022)
     }
   }
 }

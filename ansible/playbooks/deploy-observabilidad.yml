@@ -1,16 +1,9 @@
-# VM7: Garage (evidencias y respaldos, ADR-016) + Prometheus + Loki + Grafana (secciones 5.2, 7 y 9).
-- name: Storage y observabilidad
-  hosts: storage_observability
+# VM1: Prometheus, Loki y Grafana de los dos ambientes (ADR-022, secciones 5.2 y 7).
+# Las 7 VMs mandan aquí sus logs (Promtail, puerto 3100) y Prometheus lee sus métricas (node_exporter, 9100).
+- name: Observabilidad (VM1)
+  hosts: observabilidad
   vars:
     dir: "{{ stack_dir }}/observabilidad"
-    garage_compose_dir: "{{ dir }}"
-    garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
-    garage_admin_token: "{{ vault_garage_admin_token }}"
-    garage_capacidad: 30G
-    garage_llaves: "{{ vault_garage_keys }}"
-    garage_permisos:
-      - { bucket: evidencias, llave: servicios }
-      - { bucket: backups-postgres, llave: backups }
   tasks:
     - name: Carpetas
       ansible.builtin.file:
@@ -28,16 +21,16 @@
       ansible.builtin.template:
         src: "../templates/{{ item.src }}"
         dest: "{{ dir }}/{{ item.dest }}"
-        mode: "0644"
+        mode: "{{ item.mode | default('0644') }}"
       loop:
         - { src: prometheus.yml.j2, dest: prometheus.yml }
         - { src: loki.yml.j2, dest: loki.yml }
         - { src: grafana-datasources.yml.j2, dest: grafana-provisioning/datasources/datasources.yml }
         - { src: grafana-contactpoints.yml.j2, dest: grafana-provisioning/alerting/contactpoints.yml }
-        - { src: observabilidad.compose.yml.j2, dest: compose.yml }
+        - { src: observabilidad.compose.yml.j2, dest: compose.yml, mode: "0600" }
       notify: Reiniciar observabilidad
 
-    - name: Dashboards de Grafana (se copian tal cual, sin plantilla)
+    - name: Dashboards y alertas de Grafana (se copian tal cual, sin plantilla)
       ansible.builtin.copy:
         src: "../files/grafana/{{ item.src }}"
         dest: "{{ dir }}/grafana-provisioning/{{ item.dest }}"
@@ -49,20 +42,10 @@
         - { src: alerting/policies.yml, dest: alerting/policies.yml }
       notify: Reiniciar observabilidad
 
-    - name: Configuración de Garage (lleva secretos)
-      ansible.builtin.template:
-        src: ../templates/garage.toml.j2
-        dest: "{{ dir }}/garage.toml"
-        mode: "0600"
-      notify: Reiniciar observabilidad
-
-    - name: Levantar Garage, Prometheus, Loki y Grafana
+    - name: Levantar Prometheus, Loki y Grafana
       community.docker.docker_compose_v2:
         project_src: "{{ dir }}"
         state: present
-
-    - name: Layout, llaves y buckets de Garage
-      ansible.builtin.include_tasks: ../tasks/garage.yml
 
   handlers:
     - name: Reiniciar observabilidad
