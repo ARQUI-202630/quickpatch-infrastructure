@@ -12,6 +12,10 @@
 #   --tags qa-vm6      vacía el QA que quedó en VM6 (PostgreSQL, Redis, Kafka y Garage de QA) y sus reglas.
 #                      Correr ANTES de deploy-kafka.yml y deploy-garage.yml: usan los mismos puertos (9092 y 9000).
 #   --tags kafka-vm4   quita el Kafka que quedó en VM4 y su regla, después de que Kafka corra en VM6.
+#
+# Paso 3 (Redis con usuarios por servicio en VM4):
+#   --tags redis-vm5   quita en VM5 la regla que dejaba entrar a VM3 (producción) al 6379 de QA.
+#
 #   --tags kafka-ui    cierra el 8080 de VM6 que abría el equipo hacia Kafka UI (sin login; se entra por túnel SSH).
 #                      setup-base.yml lo había vuelto a abrir mientras firewall.yml todavía lo traía.
 #   --tags garage-vm7  quita el Garage de producción de VM7 y sus reglas, después de que Garage corra en VM6 y el
@@ -182,3 +186,19 @@
         from_ip: "{{ item }}"
         delete: true
       loop: "{{ team_networks }}"
+
+- name: Quitar de VM5 el acceso de producción al Redis de QA
+  hosts: vm5
+  tags: [redis-vm5]
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+    - name: Quitar la regla de VM3 hacia el 6379 de VM5
+      ansible.posix.firewalld:
+        zone: quickpatch
+        rich_rule: 'rule family="ipv4" source address="{{ ip.vm3 }}" port port="6379" protocol="tcp" accept'
+        permanent: true
+        immediate: true
+        state: disabled

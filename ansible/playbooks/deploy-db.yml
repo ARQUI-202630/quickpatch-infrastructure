@@ -41,6 +41,16 @@
         project_src: "{{ dir }}"
         state: present
 
+    # El script de inicialización solo corre cuando la base se crea. Para las bases que ya existen, la extensión
+    # se habilita aquí (service_request se agregó a postgis_databases después de crear las bases).
+    - name: Habilitar PostGIS en las bases que lo necesitan
+      ansible.builtin.shell: |
+        docker compose -f {{ dir }}/compose.yml exec -T -u postgres postgres \
+          psql -d db_{{ item }} -Atc "CREATE EXTENSION IF NOT EXISTS postgis" 2>&1
+      register: postgis
+      changed_when: "'already exists' not in postgis.stdout"
+      loop: "{{ postgis_databases }}"
+
     - name: Script de respaldo diario a Garage en VM6 (sección 9.2)
       ansible.builtin.template:
         src: ../templates/pg-backup.sh.j2

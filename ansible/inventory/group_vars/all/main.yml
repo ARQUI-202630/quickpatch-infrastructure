@@ -87,10 +87,13 @@ postgres_databases:
   - ranking
   - payments
   - communication
-postgis_databases: [matching]
+postgis_databases: [matching, service_request]   # service_request guarda la ubicación de la solicitud: geometry(Point, 4326)
 
 # --- QA (ADR-015) --------------------------------------------------------------
 # Mismos componentes que producción, con memoria reducida para caber en una VM.
 qa_kafka_heap: "-Xms512m -Xmx1g"
 qa_redis_maxmemory: 512mb
+
+# Redis de producción (ADR-022): comparte VM4 con PostgreSQL. El tope se revisa con la medición de RAM (SCRUM-347).
+redis_maxmemory: 1gb
 backup_retention_days: 7

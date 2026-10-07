@@ -20,9 +20,8 @@ firewall_by_host:
     - { port: 30080, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTP)" }
     - { port: 30443, from: ["{{ ip.vm1 }}"], comment: "Gateway -> Traefik (HTTPS)" }
     - { port: 6443, from: ["{{ ip.vm1 }}"], comment: "Runner -> API de k3s" }
-  vm4:
+  vm4:   # Producción, datos (ADR-022): PostgreSQL y Redis
     - { port: 5432, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> PostgreSQL" }
-  vm5:
     - { port: 6379, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Redis" }
   vm6:   # Producción, mensajería y almacenamiento (ADR-022). Kafka UI (8080) no se abre: se entra por túnel SSH.
     - { port: 9092, from: ["{{ ip.vm3 }}"], comment: "Microservicios -> Kafka" }

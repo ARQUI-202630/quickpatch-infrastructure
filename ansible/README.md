@@ -68,7 +68,7 @@ Primero solo lectura, después en modo simulación y al final de verdad:
 | `deploy-observabilidad.yml` | VM1 | Prometheus, Loki y Grafana de los dos ambientes (ADR-022); dashboards y alertas |
 | `deploy-garage.yml` | VM6 | Garage de producción (S3), con una llave por servicio; buckets y llaves de Garage |
 | `deploy-db.yml` | VM4 | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
-| `deploy-cache.yml` | VM5 | Redis con contraseña |
+| `deploy-cache.yml` | VM4 | Redis con un usuario ACL por servicio, restringido a sus claves (tope de memoria `redis_maxmemory`) |
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
 | `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |
 | `deploy-qa.yml` | VM2 | QA completo en una VM: k3s, PostgreSQL, Redis, Kafka, Garage y Nginx, con secretos propios |
@@ -128,3 +128,12 @@ Prometheus (9090) y Grafana (3000) no tienen puerto abierto en el firewall: se l
 5. `./ap playbooks/migrar-adr-022.yml --tags kafka-vm4,garage-vm7,kafka-ui -e confirmar_borrado=true`: quita Kafka de VM4, Garage de VM7 y cierra el 8080 de Kafka UI en VM6.
 
 Kafka UI no tiene puerto abierto: `ssh -L 8080:10.43.99.12:8080 estudiante@10.43.99.12` y luego `http://localhost:8080`.
+
+**Paso 3 — Redis con usuarios por servicio y PostGIS en VM4:**
+
+1. `./ap playbooks/setup-base.yml`: firewall (VM4 acepta el 6379 desde VM3).
+2. `./ap playbooks/deploy-cache.yml`: Redis con el archivo de usuarios (`default` apagado, `admin` para operación y un usuario por servicio restringido a `<servicio>:*`).
+3. `./ap playbooks/deploy-db.yml`: habilita PostGIS también en `db_service_request`.
+4. `./ap playbooks/migrar-adr-022.yml --tags redis-vm5 -e confirmar_borrado=true`: quita en VM5 el acceso de VM3 al 6379.
+
+Los servicios reciben su usuario y su contraseña en su propio `Secret` de Kubernetes (Documento de Infraestructura, 3.4).
