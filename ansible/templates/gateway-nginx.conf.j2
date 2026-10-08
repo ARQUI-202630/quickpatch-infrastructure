@@ -41,8 +41,7 @@ http {
     }
   }
 
-  # QA (VM2). Mismo build del panel que producción, servido en la raíz por el Nginx de VM2.
-  # Solo red del equipo: el panel de QA todavía no tiene login.
+  # QA (VM2, ADR-022). Solo red del equipo: el panel de QA todavía no tiene login.
   server {
     listen {{ ansible_host }}:443 ssl;
     server_name {{ gateway_hosts.qa }};
@@ -51,7 +50,13 @@ http {
 {% endfor %}
     deny all;
 
-    # TLS termina aquí. QA es un k3s en VM2 (ADR-022): el gateway y el panel de QA entran por Traefik.
+    # La API: igual que en producción, el gateway quita /api y reenvía al Traefik de QA (VM2), que elige el servicio por la
+    # ruta del contrato (los Ingress de cada servicio no llevan /api). Sin esto, /api/v1/... llega a Traefik y da 404.
+    location /api/ {
+      proxy_pass http://{{ ip.vm2 }}:30080/;
+    }
+
+    # El panel de QA todavía no se publica en VM1: hasta entonces, lo demás va al Traefik de QA.
     location / {
       proxy_pass http://{{ ip.vm2 }}:30080;
       proxy_set_header Host $host;
@@ -63,7 +68,7 @@ http {
     }
   }
 
-  # Grafana (VM7). Prometheus no se publica: Grafana lo consulta dentro del laboratorio.
+  # Grafana (en la propia VM1). Prometheus no se publica: Grafana lo consulta dentro del laboratorio.
   server {
     listen {{ ansible_host }}:443 ssl;
     server_name {{ gateway_hosts.grafana }};
