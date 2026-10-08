@@ -23,6 +23,8 @@
 #
 #   --tags kafka-ui    cierra el 8080 de VM6 que abría el equipo hacia Kafka UI (sin login; se entra por túnel SSH).
 #                      setup-base.yml lo había vuelto a abrir mientras firewall.yml todavía lo traía.
+#   --tags pg-roles    borra los roles app_<servicio> de PostgreSQL (VM4 y VM5), después de que deploy-db.yml cree los
+#                      <servicio>_migrator y <servicio>_app del DD 10.2 y cambie los dueños de las bases.
 #   --tags garage-vm7  quita el Garage de producción de VM7 y sus reglas, después de que Garage corra en VM6 y el
 #                      respaldo de VM4 apunte a VM6.
 - name: Quitar la observabilidad vieja de VM7
@@ -273,3 +275,33 @@
         immediate: true
         state: disabled
       loop: ["{{ k3s_cluster_cidr }}", "{{ k3s_service_cidr }}"]
+
+- name: Quitar los roles app_<servicio> de PostgreSQL
+  hosts: database:qa_datos
+  tags: [pg-roles]
+  vars:
+    dir: "{{ stack_dir }}/postgres"
+  tasks:
+    - name: Exigir confirmación
+      ansible.builtin.assert:
+        that: confirmar_borrado | default(false) | bool
+        fail_msg: "Operación destructiva: repetir con -e confirmar_borrado=true"
+
+    # Antes de borrar el rol, la base ya debe tener a <servicio>_migrator como dueño (lo hace deploy-db.yml).
+    - name: Comprobar que ninguna base sigue siendo de un rol app_
+      ansible.builtin.command: >-
+        docker compose -f {{ dir }}/compose.yml exec -T -u postgres postgres
+        psql -d postgres -Atc "SELECT datname FROM pg_database d JOIN pg_roles r ON r.oid = d.datdba WHERE r.rolname LIKE 'app\_%'"
+      register: bases_viejas
+      changed_when: false
+      failed_when: bases_viejas.stdout | trim != ''
+
+    - name: Borrar el rol app_<servicio> y lo que tenga asignado
+      ansible.builtin.command: >-
+        docker compose -f {{ dir }}/compose.yml exec -T -u postgres postgres
+        psql -v ON_ERROR_STOP=1 -q -d db_{{ item }} -c
+        "DO $$ BEGIN
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_{{ item }}') THEN
+        DROP OWNED BY app_{{ item }}; DROP ROLE app_{{ item }}; END IF; END $$"
+      loop: "{{ postgres_databases }}"
+      changed_when: true

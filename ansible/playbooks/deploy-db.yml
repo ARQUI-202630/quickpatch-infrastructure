@@ -16,12 +16,20 @@
     - name: Carpeta del script de inicialización
       ansible.builtin.file: { path: "{{ dir }}/init", state: directory, owner: "999", mode: "0700" }
 
-    - name: Script de inicialización (bases, roles y PostGIS)
+    - name: Script de inicialización (bases y PostGIS)
       ansible.builtin.template:
         src: ../templates/postgres-init.sql.j2
         dest: "{{ dir }}/init/01-quickpatch.sql"
         owner: "999"
         mode: "0600"
+
+    - name: Script de roles y dueños de las bases (DD 10.2)
+      ansible.builtin.template:
+        src: ../templates/postgres-roles.sql.j2
+        dest: "{{ dir }}/init/02-roles.sql"
+        owner: "999"
+        mode: "0600"
+      no_log: true
 
     - name: Acceso solo desde el k3s del ambiente, cada rol a su propia base
       ansible.builtin.template:
@@ -41,6 +49,23 @@
       community.docker.docker_compose_v2:
         project_src: "{{ dir }}"
         state: present
+
+    - name: Esperar a que PostgreSQL acepte conexiones
+      ansible.builtin.command: docker compose -f {{ dir }}/compose.yml exec -T postgres pg_isready -h 127.0.0.1 -U postgres
+      register: pg_listo
+      until: pg_listo.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    # En un volumen nuevo el script ya corrió al crearse; en uno existente hay que aplicarlo. Es idempotente, así que
+    # se aplica siempre: vuelve a fijar contraseñas y dueños.
+    - name: Aplicar los roles y los dueños de las bases
+      ansible.builtin.command: >-
+        docker compose -f {{ dir }}/compose.yml exec -T -u postgres postgres
+        psql -v ON_ERROR_STOP=1 -q -d postgres -f /docker-entrypoint-initdb.d/02-roles.sql
+      changed_when: false
+      no_log: true
 
     # El script de inicialización solo corre cuando la base se crea. Para las bases que ya existen, la extensión
     # se habilita aquí (service_request se agregó a postgis_databases después de crear las bases).

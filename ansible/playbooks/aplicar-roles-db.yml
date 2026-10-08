@@ -1,0 +1,33 @@
+# Aplica el db/roles.sql de cada servicio: permisos de <servicio>_app, rol <servicio>_outbox e identity_platform (DD 10.2).
+# Va DESPUÉS de las migraciones del servicio: los GRANT necesitan que las tablas ya existan, y las crea el init
+# container del Deployment (migrator). Es idempotente y no toca contraseñas (esas las pone deploy-db.yml).
+#
+#   ./ap playbooks/aplicar-roles-db.yml --limit qa                          todos los servicios que ya tienen roles.sql
+#   ./ap playbooks/aplicar-roles-db.yml --limit qa -e servicio=identity     solo uno
+#   -e roles_ref=<rama o etiqueta>                                          versión del roles.sql (por defecto develop)
+- name: Permisos de las bases de datos de los servicios
+  hosts: database:qa_datos
+  vars:
+    dir: "{{ stack_dir }}/postgres"
+    roles_ref: develop
+    servicios_con_roles: [identity, catalog, service_request, matching]
+    lista: "{{ [servicio] if servicio is defined else servicios_con_roles }}"
+  tasks:
+    - name: Carpeta de los roles.sql
+      ansible.builtin.file: { path: "{{ dir }}/roles", state: directory, mode: "0750" }
+
+    - name: Bajar el roles.sql de cada servicio
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/ARQUI-202630/quickpatch-{{ item | replace('_', '-') }}/{{ roles_ref }}/db/roles.sql"
+        dest: "{{ dir }}/roles/{{ item }}.sql"
+        mode: "0640"
+        force: true
+      loop: "{{ lista }}"
+
+    # roles.sql crea los roles que falten y concede permisos; se puede repetir sin efecto.
+    - name: Aplicar el roles.sql en la base de cada servicio
+      ansible.builtin.shell: >-
+        docker compose -f {{ dir }}/compose.yml exec -T -u postgres postgres
+        psql -v ON_ERROR_STOP=1 -q -d db_{{ item }} < {{ dir }}/roles/{{ item }}.sql
+      changed_when: false
+      loop: "{{ lista }}"

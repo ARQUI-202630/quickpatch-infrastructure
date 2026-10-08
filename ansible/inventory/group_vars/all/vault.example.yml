@@ -3,7 +3,16 @@
 #   cp vault.example.yml vault.yml
 #   ansible-vault encrypt vault.yml
 vault_postgres_superuser_password: CAMBIAR
-vault_service_db_passwords:          # una por base de postgres_databases
+vault_db_roles_passwords:            # DD 10.2: por cada base de postgres_databases, el migrator (dueño) y el app (el servicio)
+  identity: { migrator: CAMBIAR, app: CAMBIAR }
+  actors: { migrator: CAMBIAR, app: CAMBIAR }
+  catalog: { migrator: CAMBIAR, app: CAMBIAR }
+  service_request: { migrator: CAMBIAR, app: CAMBIAR }
+  matching: { migrator: CAMBIAR, app: CAMBIAR }
+  ranking: { migrator: CAMBIAR, app: CAMBIAR }
+  payments: { migrator: CAMBIAR, app: CAMBIAR }
+  communication: { migrator: CAMBIAR, app: CAMBIAR }
+vault_service_db_passwords:          # SIN USO desde el DD 10.2 (rol app_<servicio>); quitar cuando se borren esos roles
   identity: CAMBIAR
   actors: CAMBIAR
   catalog: CAMBIAR
@@ -35,7 +44,16 @@ vault_github_runner_token: CAMBIAR   # token de registro del runner, a nivel de 
 
 # QA (ADR-015): secretos propios, nunca los de producción
 vault_qa_postgres_superuser_password: CAMBIAR
-vault_qa_service_db_password: CAMBIAR   # una sola para las bases de QA
+vault_qa_db_roles_passwords:         # igual que la de producción, con valores propios
+  identity: { migrator: CAMBIAR, app: CAMBIAR }
+  actors: { migrator: CAMBIAR, app: CAMBIAR }
+  catalog: { migrator: CAMBIAR, app: CAMBIAR }
+  service_request: { migrator: CAMBIAR, app: CAMBIAR }
+  matching: { migrator: CAMBIAR, app: CAMBIAR }
+  ranking: { migrator: CAMBIAR, app: CAMBIAR }
+  payments: { migrator: CAMBIAR, app: CAMBIAR }
+  communication: { migrator: CAMBIAR, app: CAMBIAR }
+vault_qa_service_db_passwords: CAMBIAR   # SIN USO desde el DD 10.2; quitar con la de producción
 vault_qa_redis_password: CAMBIAR
 vault_qa_redis_admin_password: CAMBIAR
 vault_qa_redis_users:                 # igual que vault_redis_users, con valores distintos a los de producción

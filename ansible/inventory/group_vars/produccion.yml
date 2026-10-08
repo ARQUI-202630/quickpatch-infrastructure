@@ -5,7 +5,7 @@ kubeconfig_name: produccion
 
 # PostgreSQL (VM4): cada base con su rol; solo VM3 (k3s) puede conectarse.
 pg_superuser_password: "{{ vault_postgres_superuser_password }}"
-pg_service_passwords: "{{ vault_service_db_passwords }}"
+pg_roles_passwords: "{{ vault_db_roles_passwords }}"   # por servicio: migrator y app (DD 10.2)
 pg_client_ip: "{{ ip.vm3 }}"
 pg_respaldo: true            # respaldo diario de PostgreSQL al Garage de VM6
 
