@@ -16,7 +16,7 @@
   vars:
     ambiente: qa
     ref: develop
-    servicios: [identity, catalog, service_request]
+    servicios: [identity, catalog, service_request, matching]
     amb:
       qa: { kubeconfig: config-qa, datos: "{{ ip.vm5 }}", kafka: "{{ ip.vm7 }}", pw: "{{ vault_qa_db_roles_passwords }}" }
       produccion: { kubeconfig: config-produccion, datos: "{{ ip.vm4 }}", kafka: "{{ ip.vm6 }}", pw: "{{ vault_db_roles_passwords }}" }
@@ -40,11 +40,11 @@
       changed_when: "'created' in secretos.stdout or 'configured' in secretos.stdout"
       no_log: true
 
-    # El manifiesto viene del repositorio de cada servicio; solo cambia la IP de Kafka del ambiente.
+    # El manifiesto viene del repositorio de cada servicio; solo cambian las IPs del ambiente (Kafka y, en Matching, la base).
     - name: Manifiestos de cada servicio
       ansible.builtin.command: "{{ kubectl }} apply -f -"
       args:
-        stdin: "{{ lookup('ansible.builtin.url', url_manifiesto, split_lines=false) | replace('<vm-mensajeria>', e.kafka) }}"
+        stdin: "{{ lookup('ansible.builtin.url', url_manifiesto, split_lines=false) | replace('<vm-mensajeria>', e.kafka) | replace('<vm-datos>', e.datos) }}"
       vars:
         repo: "quickpatch-{{ item | replace('_', '-') }}"
         url_manifiesto: "https://raw.githubusercontent.com/ARQUI-202630/{{ repo }}/{{ ref }}/deploy/k8s/{{ item | replace('_', '-') }}.yaml"
