@@ -16,12 +16,14 @@
     - name: Carpeta de los roles.sql
       ansible.builtin.file: { path: "{{ dir }}/roles", state: directory, mode: "0750" }
 
-    - name: Bajar el roles.sql de cada servicio
-      ansible.builtin.get_url:
-        url: "https://raw.githubusercontent.com/ARQUI-202630/quickpatch-{{ item | replace('_', '-') }}/{{ roles_ref }}/db/roles.sql"
+    # Las VMs del laboratorio no llegan a raw.githubusercontent.com: el archivo se baja desde donde corre Ansible y se copia.
+    - name: Copiar el roles.sql de cada servicio
+      ansible.builtin.copy:
+        content: "{{ lookup('ansible.builtin.url', url_roles, split_lines=false) }}"
         dest: "{{ dir }}/roles/{{ item }}.sql"
         mode: "0640"
-        force: true
+      vars:
+        url_roles: "https://raw.githubusercontent.com/ARQUI-202630/quickpatch-{{ item | replace('_', '-') }}/{{ roles_ref }}/db/roles.sql"
       loop: "{{ lista }}"
 
     # roles.sql crea los roles que falten y concede permisos; se puede repetir sin efecto.
