@@ -69,3 +69,21 @@ vault_qa_garage_rpc_secret: CAMBIAR
 vault_qa_garage_admin_token: CAMBIAR
 vault_qa_garage_keys:
   servicios: { id: CAMBIAR, secret: CAMBIAR }
+
+# Servicios en k3s (primer-despliegue-servicios.yml): llave RSA con la que Identity firma los tokens (ADR-018) y su
+# pública, que reciben los demás servicios. Una por ambiente: openssl genrsa -out k.pem 2048; openssl rsa -in k.pem -pubout
+vault_jwt_keys:
+  qa:
+    private: |
+      CAMBIAR (PEM)
+    public: |
+      CAMBIAR (PEM)
+  produccion:
+    private: |
+      CAMBIAR (PEM)
+    public: |
+      CAMBIAR (PEM)
+# Administradores iniciales que Identity crea al arrancar: el del tenant (admin_tenant) y el de la plataforma (admin_plataforma)
+vault_identity_admins:
+  qa: { admin_email: CAMBIAR, admin_password: CAMBIAR, platform_email: CAMBIAR, platform_password: CAMBIAR }
+  produccion: { admin_email: CAMBIAR, admin_password: CAMBIAR, platform_email: CAMBIAR, platform_password: CAMBIAR }
