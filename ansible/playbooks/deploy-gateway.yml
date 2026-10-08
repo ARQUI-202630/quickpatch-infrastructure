@@ -46,6 +46,10 @@
       ansible.builtin.template:
         src: ../templates/gateway-nginx.conf.j2
         dest: "{{ dir }}/nginx.conf"
+        # Nginx es la única entrada: una configuración rota no se escribe. Se prueba con los certificados reales de VM1.
+        validate: >-
+          docker run --rm --network host --entrypoint nginx -v %s:/tmp/nginx.conf:ro -v {{ dir }}/certs:/etc/nginx/certs:ro
+          {{ images.nginx }} -t -c /tmp/nginx.conf
         mode: "0644"
       notify: Recargar gateway
 
