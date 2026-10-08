@@ -1,3 +1,9 @@
+> **Repositorio archivado (SCRUM-338).** Su contenido se trasladó y ya no se mantiene aquí:
+> - Ansible e inventario → [`quickpatch/infrastructure/`](https://github.com/ARQUI-202630/quickpatch/tree/develop/infrastructure)
+> - Configuración de Nginx del gateway → [`quickpatch-api-gateway/nginx/`](https://github.com/ARQUI-202630/quickpatch-api-gateway/tree/develop/nginx)
+> - Despliegue de Kafka y creación de topics → [`quickpatch-kafka/deploy/`](https://github.com/ARQUI-202630/quickpatch-kafka/tree/develop/deploy)
+> - CI/CD → `.github/workflows/ci-cd.yml` de cada repositorio (los workflows reutilizables de este repo ya no se usan)
+
 # Infraestructura QUICKPATCH
 
 Implementación de `docs/infrastructure/INFRASTRUCTURE.md`.
