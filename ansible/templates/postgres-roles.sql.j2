@@ -1,0 +1,20 @@
+{# Roles de base de datos del DD 10.2. Se puede repetir: crea lo que falta y vuelve a fijar contraseñas y dueños. #}
+{# <servicio>_migrator: dueño de la base y de las tablas, solo para el paso de migraciones; BYPASSRLS. #}
+{# <servicio>_app: el servicio, sujeto a RLS. Sus permisos sobre las tablas los pone db/roles.sql del servicio #}
+{# (playbook aplicar-roles-db.yml), que también crea <servicio>_outbox e identity_platform. #}
+{% for db in postgres_databases %}
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ db }}_migrator') THEN
+        CREATE ROLE {{ db }}_migrator LOGIN BYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ db }}_app') THEN
+        CREATE ROLE {{ db }}_app LOGIN NOBYPASSRLS;
+    END IF;
+END
+$$;
+ALTER ROLE {{ db }}_migrator LOGIN BYPASSRLS PASSWORD '{{ pg_roles_passwords[db].migrator }}';
+ALTER ROLE {{ db }}_app LOGIN NOBYPASSRLS PASSWORD '{{ pg_roles_passwords[db].app }}';
+ALTER DATABASE db_{{ db }} OWNER TO {{ db }}_migrator;
+GRANT CONNECT ON DATABASE db_{{ db }} TO {{ db }}_app;
+{% endfor %}

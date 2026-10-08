@@ -5,7 +5,7 @@ kubeconfig_name: qa
 
 # PostgreSQL (VM5): solo VM2 (k3s de QA) puede conectarse. QA no tiene respaldo: sus datos son de prueba.
 pg_superuser_password: "{{ vault_qa_postgres_superuser_password }}"
-pg_service_passwords: "{{ vault_qa_service_db_passwords }}"
+pg_roles_passwords: "{{ vault_qa_db_roles_passwords }}"   # por servicio: migrator y app (DD 10.2)
 pg_client_ip: "{{ ip.vm2 }}"
 pg_respaldo: false
 

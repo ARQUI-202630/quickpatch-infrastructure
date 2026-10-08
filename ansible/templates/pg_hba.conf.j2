@@ -1,7 +1,9 @@
-# Local (respaldo y administración desde VM4)
+# Local (respaldo y administración desde {{ 'VM4' if entorno == 'produccion' else 'VM5' }})
 local   all   postgres                    peer
 host    all   postgres   127.0.0.1/32     scram-sha-256
-# Cada servicio solo entra a su propia base, y solo desde {{ 'VM3' if entorno == 'produccion' else 'VM2' }} (k3s)
+# Cada servicio solo entra a su propia base, y solo desde {{ 'VM3' if entorno == 'produccion' else 'VM2' }} (k3s).
+# El migrator corre las migraciones en el despliegue; el app es el servicio (DD 10.2).
 {% for db in postgres_databases %}
-host    db_{{ db }}   app_{{ db }}   {{ pg_client_ip }}/32   scram-sha-256
+host    db_{{ db }}   {{ db }}_migrator   {{ pg_client_ip }}/32   scram-sha-256
+host    db_{{ db }}   {{ db }}_app        {{ pg_client_ip }}/32   scram-sha-256
 {% endfor %}
