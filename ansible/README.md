@@ -67,7 +67,9 @@ Primero solo lectura, después en modo simulación y al final de verdad:
 | `setup-base.yml` | Todas | Paquetes, usuario de despliegue, SSH, Docker, firewall, node_exporter y Promtail |
 | `deploy-observabilidad.yml` | VM1 | Prometheus, Loki y Grafana de los dos ambientes (ADR-022); dashboards y alertas |
 | `deploy-garage.yml` | VM6 | Garage de producción (S3), con una llave por servicio; buckets y llaves de Garage |
-| `deploy-db.yml` | VM4 y VM5 (QA) | PostgreSQL + PostGIS, una base por servicio y respaldo diario a Garage (VM7) |
+| `deploy-db.yml` | VM4 y VM5 (QA) | PostgreSQL + PostGIS, una base por servicio con roles `_migrator` y `_app`, y respaldo diario a Garage (VM6) |
+| `aplicar-roles-db.yml` | VM4 y VM5 (QA) | Aplica el `db/roles.sql` de cada servicio; va después de sus migraciones |
+| `primer-despliegue-servicios.yml` | VM1 (hacia el k3s de un ambiente) | Secret de cada servicio desde el vault y sus manifiestos, con la IP de Kafka del ambiente (`-e ambiente=qa` o `produccion`) |
 | `deploy-cache.yml` | VM4 | Redis con un usuario ACL por servicio, restringido a sus claves (tope de memoria `redis_maxmemory`) |
 | `deploy-kafka.yml` | VM6 | Kafka en modo KRaft y Kafka UI |
 | `deploy-k3s.yml` | VM3 | k3s de producción (la instalación compartida está en `tasks/k3s.yml`) |

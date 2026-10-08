@@ -1,0 +1,62 @@
+# Primer despliegue de los servicios en el k3s de un ambiente: sus Secret (desde Ansible Vault) y sus manifiestos.
+# Corre en VM1, que tiene kubectl y los kubeconfig de los dos ambientes (deploy-runner.yml).
+#
+#   ./ap playbooks/primer-despliegue-servicios.yml -e ambiente=qa
+#   ./ap playbooks/primer-despliegue-servicios.yml -e ambiente=produccion
+#   -e servicios='["identity"]'     solo algunos
+#   -e ref=<rama o etiqueta>        versión de los manifiestos (por defecto develop)
+#
+# Los Deployment quedan esperando su imagen (:pendiente) hasta que el pipeline de cada servicio la publique con un push
+# a release/*; el init container aplica entonces las migraciones. Después hay que correr aplicar-roles-db.yml.
+- name: Secret y manifiestos de los servicios en k3s
+  hosts: gateway
+  gather_facts: false
+  become: true
+  become_user: "{{ deploy_user }}"
+  vars:
+    ambiente: qa
+    ref: develop
+    servicios: [identity, catalog, service_request]
+    amb:
+      qa: { kubeconfig: config-qa, datos: "{{ ip.vm5 }}", kafka: "{{ ip.vm7 }}", pw: "{{ vault_qa_db_roles_passwords }}" }
+      produccion: { kubeconfig: config-produccion, datos: "{{ ip.vm4 }}", kafka: "{{ ip.vm6 }}", pw: "{{ vault_db_roles_passwords }}" }
+    e: "{{ amb[ambiente] }}"
+    jwt: "{{ vault_jwt_keys[ambiente] }}"
+    admins: "{{ vault_identity_admins[ambiente] }}"
+    kubectl: "kubectl --kubeconfig /home/{{ deploy_user }}/.kube/{{ e.kubeconfig }} -n quickpatch"
+  tasks:
+    - name: Exigir un ambiente conocido
+      ansible.builtin.assert:
+        that: ambiente in amb
+        fail_msg: "-e ambiente=qa o -e ambiente=produccion"
+
+    - name: Secret de cada servicio
+      ansible.builtin.command: "{{ kubectl }} apply -f -"
+      args:
+        stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/../templates/secreto-servicio.yaml.j2') }}"
+      loop: "{{ servicios }}"
+      loop_control: { label: "{{ item | replace('_', '-') }}-secretos" }
+      register: secretos
+      changed_when: "'created' in secretos.stdout or 'configured' in secretos.stdout"
+      no_log: true
+
+    # El manifiesto viene del repositorio de cada servicio; solo cambia la IP de Kafka del ambiente.
+    - name: Manifiestos de cada servicio
+      ansible.builtin.command: "{{ kubectl }} apply -f -"
+      args:
+        stdin: "{{ lookup('ansible.builtin.url', url_manifiesto, split_lines=false) | replace('<vm-mensajeria>', e.kafka) }}"
+      vars:
+        repo: "quickpatch-{{ item | replace('_', '-') }}"
+        url_manifiesto: "https://raw.githubusercontent.com/ARQUI-202630/{{ repo }}/{{ ref }}/deploy/k8s/{{ item | replace('_', '-') }}.yaml"
+      loop: "{{ servicios }}"
+      loop_control: { label: "{{ item | replace('_', '-') }}" }
+      register: manifiestos
+      changed_when: "'created' in manifiestos.stdout or 'configured' in manifiestos.stdout"
+
+    - name: Estado de los Deployment
+      ansible.builtin.command: "{{ kubectl }} get deployment,pods"
+      register: estado
+      changed_when: false
+
+    - name: Mostrar
+      ansible.builtin.debug: { msg: "{{ estado.stdout_lines }}" }
